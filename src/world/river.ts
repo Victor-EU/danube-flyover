@@ -1,8 +1,15 @@
-// River geometry in local metres: the water polygon (banks minus islands), a point-in-water
-// test, distance to the nearest bank, and scanline crossings for building grids.
+// River geometry in local metres, from public/data/river.json (built by tools/build-water.ts
+// from OpenStreetMap): a point-in-water test, the nearest bank, and scanline water spans.
 
-import { latLonToLocal, type XZ } from "../geo";
-import { EAST_BANK, ISLANDS, WEST_BANK, type LatLon } from "./osmPlaceholder";
+import type { XZ } from "../geo";
+
+export interface RiverJson {
+  /** Polygons as [outer, ...holes]; each ring a flat [x, z, ...] list. */
+  water: number[][][];
+  /** The real bank lines; a closed bank (an island) repeats its first point. */
+  banks: number[][];
+  centreline: number[];
+}
 
 type Ring = Float64Array; // x0, z0, x1, z1, ... (implicitly closed)
 
@@ -19,16 +26,6 @@ export interface BankHit {
 
 const CELL = 50;
 
-function toFlat(points: readonly LatLon[]): Float64Array {
-  const out = new Float64Array(points.length * 2);
-  points.forEach((p, i) => {
-    const l = latLonToLocal(p);
-    out[i * 2] = l.x;
-    out[i * 2 + 1] = l.z;
-  });
-  return out;
-}
-
 /** x positions where a closed ring crosses the horizontal line z (half-open rule). */
 function ringCrossings(ring: Ring, z: number, out: number[]): void {
   const n = ring.length / 2;
@@ -43,72 +40,41 @@ function ringCrossings(ring: Ring, z: number, out: number[]): void {
   }
 }
 
-function bankAt(line: Float64Array, z: number): { x: number; ux: number; uz: number } {
-  const n = line.length / 2;
-  for (let i = 0; i < n - 1; i++) {
-    const za = line[i * 2 + 1];
-    const zb = line[i * 2 + 3];
-    if ((za - z) * (zb - z) <= 0 && za !== zb) {
-      const ex = line[i * 2 + 2] - line[i * 2];
-      const ez = zb - za;
-      const l = Math.hypot(ex, ez);
-      return { x: line[i * 2] + ((z - za) / ez) * ex, ux: ex / l, uz: ez / l };
-    }
-  }
-  return { x: line[z < line[1] ? 0 : (n - 1) * 2], ux: 0, uz: 1 };
-}
-
-function pointInRing(ring: Ring, x: number, z: number): boolean {
-  let inside = false;
-  const n = ring.length / 2;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = ring[i * 2];
-    const zi = ring[i * 2 + 1];
-    const xj = ring[j * 2];
-    const zj = ring[j * 2 + 1];
-    if (zi <= z !== zj <= z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
-  }
-  return inside;
-}
-
 export class River {
-  /** Buda and Pest banks, north to south. */
-  readonly west: Float64Array;
-  readonly east: Float64Array;
-  readonly islands: Ring[];
-  /** The water ring: west bank down, east bank back up. */
-  private readonly ring: Ring;
+  /** Every ring of every water polygon; inside-ness is even-odd over all of them. */
+  readonly rings: Ring[];
+  readonly banks: Float64Array[];
+  readonly centreline: Float64Array;
+  private readonly ringBoxes: number[][];
   private readonly segs: number[] = []; // ax, az, bx, bz
   private readonly grid = new Map<number, number[]>();
 
-  constructor() {
-    this.west = toFlat(WEST_BANK);
-    this.east = toFlat(EAST_BANK);
-    this.islands = ISLANDS.map((i) => toFlat(i.outline));
-    const nw = this.west.length / 2;
-    const ne = this.east.length / 2;
-    this.ring = new Float64Array((nw + ne) * 2);
-    this.ring.set(this.west, 0);
-    for (let i = 0; i < ne; i++) {
-      this.ring[(nw + i) * 2] = this.east[(ne - 1 - i) * 2];
-      this.ring[(nw + i) * 2 + 1] = this.east[(ne - 1 - i) * 2 + 1];
-    }
-    this.addPolyline(this.west, false);
-    this.addPolyline(this.east, false);
-    for (const r of this.islands) this.addPolyline(r, true);
+  constructor(data: RiverJson) {
+    this.rings = data.water.flat().map((r) => Float64Array.from(r));
+    this.ringBoxes = this.rings.map((r) => {
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (let i = 0; i < r.length; i += 2) {
+        x0 = Math.min(x0, r[i]);
+        x1 = Math.max(x1, r[i]);
+        z0 = Math.min(z0, r[i + 1]);
+        z1 = Math.max(z1, r[i + 1]);
+      }
+      return [x0, z0, x1, z1];
+    });
+    this.banks = data.banks.map((b) => Float64Array.from(b));
+    this.centreline = Float64Array.from(data.centreline);
+    for (const b of this.banks) this.addPolyline(b);
   }
 
-  private addPolyline(p: Float64Array, closed: boolean): void {
+  private addPolyline(p: Float64Array): void {
     const n = p.length / 2;
-    const count = closed ? n : n - 1;
-    for (let i = 0; i < count; i++) {
-      const j = (i + 1) % n;
+    for (let i = 0; i < n - 1; i++) {
       const idx = this.segs.length / 4;
-      this.segs.push(p[i * 2], p[i * 2 + 1], p[j * 2], p[j * 2 + 1]);
-      const x0 = Math.floor(Math.min(p[i * 2], p[j * 2]) / CELL);
-      const x1 = Math.floor(Math.max(p[i * 2], p[j * 2]) / CELL);
-      const z0 = Math.floor(Math.min(p[i * 2 + 1], p[j * 2 + 1]) / CELL);
-      const z1 = Math.floor(Math.max(p[i * 2 + 1], p[j * 2 + 1]) / CELL);
+      this.segs.push(p[i * 2], p[i * 2 + 1], p[i * 2 + 2], p[i * 2 + 3]);
+      const x0 = Math.floor(Math.min(p[i * 2], p[i * 2 + 2]) / CELL);
+      const x1 = Math.floor(Math.max(p[i * 2], p[i * 2 + 2]) / CELL);
+      const z0 = Math.floor(Math.min(p[i * 2 + 1], p[i * 2 + 3]) / CELL);
+      const z1 = Math.floor(Math.max(p[i * 2 + 1], p[i * 2 + 3]) / CELL);
       for (let cx = x0; cx <= x1; cx++)
         for (let cz = z0; cz <= z1; cz++) {
           const key = cx * 100003 + cz;
@@ -120,12 +86,24 @@ export class River {
   }
 
   isWater(x: number, z: number): boolean {
-    if (!pointInRing(this.ring, x, z)) return false;
-    for (const r of this.islands) if (pointInRing(r, x, z)) return false;
-    return true;
+    let inside = false;
+    for (let k = 0; k < this.rings.length; k++) {
+      const bx = this.ringBoxes[k];
+      if (x < bx[0] || x > bx[2] || z < bx[1] || z > bx[3]) continue;
+      const ring = this.rings[k];
+      const n = ring.length / 2;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const xi = ring[i * 2];
+        const zi = ring[i * 2 + 1];
+        const xj = ring[j * 2];
+        const zj = ring[j * 2 + 1];
+        if (zi <= z !== zj <= z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
+      }
+    }
+    return inside;
   }
 
-  /** Nearest bank point within `radius`, or null. Islands count as banks. */
+  /** Nearest bank point within `radius`, or null. Islands count as banks; the world edge does not. */
   nearestBank(x: number, z: number, radius: number): BankHit | null {
     const r = Math.ceil(radius / CELL);
     const cx = Math.floor(x / CELL);
@@ -161,46 +139,12 @@ export class River {
    * [x0, x1), [x2, x3), ... Used to fill masks a row at a time.
    */
   waterSpans(z: number): number[] {
-    const river: number[] = [];
-    ringCrossings(this.ring, z, river);
-    river.sort((a, b) => a - b);
-    const islands: number[] = [];
-    for (const r of this.islands) ringCrossings(r, z, islands);
-    if (islands.length === 0) return river;
-    islands.sort((a, b) => a - b);
-    // Subtract island intervals from river intervals.
-    const out: number[] = [];
-    for (let i = 0; i + 1 < river.length; i += 2) {
-      let start = river[i];
-      const end = river[i + 1];
-      for (let k = 0; k + 1 < islands.length; k += 2) {
-        const a = islands[k];
-        const b = islands[k + 1];
-        if (b <= start || a >= end) continue;
-        if (a > start) out.push(start, a);
-        start = Math.max(start, b);
-      }
-      if (start < end) out.push(start, end);
-    }
-    return out;
+    const xs: number[] = [];
+    for (const r of this.rings) ringCrossings(r, z, xs);
+    return xs.sort((a, b) => a - b);
   }
 
-  /** x of the Buda bank at z (first crossing). */
-  westBankX(z: number): number {
-    return bankAt(this.west, z).x;
-  }
-
-  /** x of the Pest bank at z (first crossing). */
-  eastBankX(z: number): number {
-    return bankAt(this.east, z).x;
-  }
-
-  /** Bank position and direction (north to south) at z on the given side. */
-  bankAt(side: "west" | "east", z: number): { x: number; ux: number; uz: number } {
-    return bankAt(side === "west" ? this.west : this.east, z);
-  }
-
-  /** Where the water ring crosses the world's north and south edges (for the backdrop frame). */
+  /** Where the water crosses the line z, outermost banks only (for the backdrop frame). */
   edgeGap(z: number): XZ[] {
     const xs = this.waterSpans(z);
     return xs.length >= 2 ? [{ x: xs[0], z }, { x: xs[xs.length - 1], z }] : [];

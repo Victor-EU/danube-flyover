@@ -1,4 +1,4 @@
-// Headless autopilot run: builds the world, flies the whole route at 60 Hz with no input and
+// Headless autopilot run: builds the world's query layer from public/data/, flies the whole route at 60 Hz with no input and
 // reports beats, mode switches, tracking error and constraint contacts.
 // Usage: npm run simulate
 
@@ -10,14 +10,19 @@ import { createState } from "../src/state";
 import { updateVehicle } from "../src/vehicle";
 import { buildWorld } from "../src/world/world";
 
-const route = new Route(
-  JSON.parse(readFileSync(new URL("../public/data/route.json", import.meta.url), "utf8")) as RouteJson,
-);
-const world = buildWorld();
+const data = (name: string) => readFileSync(new URL(`../public/data/${name}`, import.meta.url));
+const json = <T>(name: string) => JSON.parse(data(name).toString("utf8")) as T;
+const route = new Route(json<RouteJson>("route.json"));
+const world = buildWorld({
+  river: json("river.json"),
+  bridges: json("bridges.json"),
+  landmarks: json("landmarks.json"),
+  trees: json("trees.json"),
+  terrain: new Uint8Array(data("terrain.bin")),
+  floor: new Uint8Array(data("floor.bin")),
+});
 console.log("build ms:", world.timings);
-console.log(
-  `solids ${world.city.solids.length}, decks ${world.bridges.decks.length}, obstacles ${world.bridges.obstacles.length}`,
-);
+console.log(`bridges ${world.bridges.names.length}, obstacles ${world.bridges.obstacles.length}, floor ${world.floor.nx} × ${world.floor.nz}`);
 
 const st = createState();
 resetToStart(st, route);

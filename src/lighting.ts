@@ -57,6 +57,8 @@ function colorCurve(keys: ColorKeys, e: number, out: Color): Color {
 }
 
 const SHADOW_HALF = 300; // 600 m box around the camera focus
+/** Far enough up-sun to catch the long shadows of a low sun (a 30 m roof at 2° reaches 860 m). */
+const SUN_DISTANCE = 1100;
 
 export class Lighting {
   readonly sun = new DirectionalLight("#ffffff", 3);
@@ -73,8 +75,9 @@ export class Lighting {
     sh.camera.right = SHADOW_HALF;
     sh.camera.top = SHADOW_HALF;
     sh.camera.bottom = -SHADOW_HALF;
+    // The light sits SUN_DISTANCE from the focus; the frustum ends 400 m past it.
     sh.camera.near = 10;
-    sh.camera.far = 4000;
+    sh.camera.far = SUN_DISTANCE + 400;
     sh.bias = -0.0004;
     sh.normalBias = 0.8;
     scene.add(this.sun, this.sun.target, this.hemi);
@@ -107,6 +110,9 @@ export class Lighting {
     this.sky.position.copy(cameraPos);
 
     this.sun.intensity = curve(SUN_INTENSITY, e);
+    // With the sun down the shadow map is unused: stop re-rendering it (toggling castShadow
+    // instead would recompile every material).
+    renderer.shadowMap.autoUpdate = this.sun.intensity > 0;
     colorCurve(SUN_COLOR, e, this.sun.color);
     this.placeShadow(focus);
 
@@ -133,7 +139,7 @@ export class Lighting {
       .addScaledVector(right, Math.round(px / texel) * texel - px)
       .addScaledVector(up, Math.round(py / texel) * texel - py);
     this.sun.target.position.copy(target);
-    this.sun.position.copy(target).addScaledVector(d, 1500);
+    this.sun.position.copy(target).addScaledVector(d, SUN_DISTANCE);
   }
 }
 

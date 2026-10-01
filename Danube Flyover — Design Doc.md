@@ -97,7 +97,7 @@ All geometry comes from open data, processed once by offline scripts into static
 | Building footprints and heights | OpenStreetMap via Overpass API (bbox 47.48–47.54 N, 19.025–19.07 E), tags `building`, `height`, `building:levels` | ODbL, attribution required | Script: fetch, project to local metres, extrude, merge by district, export glTF |
 | River polygon, islands, banks | OSM `natural=water` + `water=river` areas for the Danube (plus legacy `waterway=riverbank` where still tagged) | ODbL | Script: union, simplify to 2 m tolerance, triangulate, export glTF |
 | Bridges | OSM `bridge=yes` ways and `man_made=bridge` areas (deck outline + span) | ODbL | Deck geometry generated; towers and ironwork hand-modelled |
-| Terrain | Copernicus GLO-30 DEM (30 m), optionally resampled to 10 m with smoothing | Free, attribution | Script: clip; subtract the river level (about 100 m above sea level) so the water sits at 0 m; flatten Pest, Margaret Island and building footprints, because GLO-30 is a surface model that includes buildings and trees; convert to 16-bit heightmap PNG. If building bumps survive on Buda, hand-sculpt the two hills from contours instead |
+| Terrain | Copernicus GLO-30 DEM (30 m), optionally resampled to 10 m with smoothing | Free, attribution | Script: clip; subtract the river level (about 100 m above sea level) so the water sits at 0 m; flatten Pest and the islands, and remove buildings and trees on Buda (a morphological opening, with level pads for the widest footprints), because GLO-30 is a surface model that includes them; export a 10 m height grid (`terrain.bin`). If building bumps survive on Buda, hand-sculpt the two hills from contours instead |
 | Roads, tram lines, parks, trees | OSM `highway`, `railway=tram`, `leisure=park`, `natural=tree` | ODbL | Decals and instance point lists |
 | Boat route and piers | BKK GTFS open data (lines D11, D12, D14) | Open | Optional; pier positions for boat-mode stops |
 | Hero landmark meshes | Hand-modelled in Blender from reference, or generated image → image-to-3D tool → cleanup | Own work | Export glTF with day and emissive textures |
@@ -105,15 +105,17 @@ All geometry comes from open data, processed once by offline scripts into static
 | Skydome panoramas | OpenAI image API, 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | Generated below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
 | Landmark illustrations | OpenAI image API, one per landmark, style sheet as reference | Own work | WebP, shown in cards |
 
-**Pipeline scripts** (`tools/`, Node or Python, run once and committed outputs):
+**Pipeline scripts** (`tools/`, TypeScript run with tsx, run once and committed outputs; `npm run build-world` runs steps 2 to 6 in order):
 
-1. `fetch-osm.js`: Overpass query, saves raw GeoJSON.
-2. `build-city.js`: projects, extrudes, assigns district and facade atlas, writes `city.glb` plus `landmarks.json` (positions for hero models) and `trees.json`.
-3. `build-terrain.py`: DEM clip, river-level offset, flattening and heightmap export.
-4. `build-water.js`: river mesh with UVs for flow direction.
-5. `gen-textures.js`: prompts the image API with the style sheet attached, writes raw PNGs to `assets/raw/`; a separate step compresses to KTX2.
-6. `build-route.js`: the autopilot spline and beat keyframes from a hand-edited `route.json`; also prints the beat timetable (each beat's start time from arc length and speed) used in the route table above.
-7. `build-floor.js`: combines the terrain heightmap, building and hero heights, and bridge towers into `floor.bin`, a 5 m height grid for the bird's altitude floor; bridge cells also store the deck's underside and top.
+1. `fetch-osm.ts` and `fetch-dem.ts`: the Overpass queries and the GLO-30 window; save the raw extracts to `tools/osm/` (GeoJSON) and `tools/dem/`.
+2. `build-water.ts`: unions and clips the river areas; writes `river.json` (water polygon, banks, centreline) and `water.glb` (river mesh with UVs for flow direction, and the quays).
+3. `build-terrain.ts`: DEM resample, river-level offset, flattening and building removal; writes `terrain.bin` (heights plus a landcover class per sample).
+4. `build-bridges.ts`: deck outlines, piers and pylons from OSM, with hand-set deck heights and styles; writes `bridges.json`.
+5. `build-city.ts`: projects, extrudes, assigns district (and, from M3, facade atlas), writes `city.glb` and `trees.json`; leaves out the buildings that `landmarks.json` says a hero replaces.
+6. `build-floor.ts`: combines the terrain, building and hero heights, tree crowns and bridge towers into `floor.bin`, a 5 m height grid for the bird's altitude floor. Bridge decks stay out of the grid: the runtime tests the deck outlines directly.
+7. `gen-textures.ts` (M3): prompts the image API with the style sheet attached, writes raw PNGs to `assets/raw/`; a separate step compresses to KTX2.
+
+The autopilot spline and its beat keyframes are built at load from the hand-edited `route.json`; `npm run timetable` prints the beat timetable (each beat's start time from arc length and speed) used in the route table above.
 
 **Texture generation rules**
 
@@ -154,9 +156,10 @@ The Controller is the only module that knows about both autopilot and the user; 
 **Key data files**
 
 - `route.json`: an ordered list of control points `{lat, lon, alt, speed, mode, hold?, beat?, timeOfDay?}`. `mode` applies from that point on; heading comes from the spline. A beat is anchored to the point where it starts (`beat: {id, name}`, with `cameraMode`, `target` and `duration` added in M2), so editing points never invalidates a hand-written arc length; `timeOfDay` keys the sunset-run clock at that point.
-- `landmarks.json`: `{id, name, position, triggerRadius, model, note, illustration}`.
+- `landmarks.json`: `{id, name, position, triggerRadius, model, note, illustration, osm?, placeholder?}`; `osm` lists the OSM buildings the hero replaces, and `placeholder` describes the block that stands in until the hero model arrives.
 - `quality.json`: three tiers (low, medium, high) setting shadow map size, reflection resolution, tree count, bloom on/off.
-- `floor.bin`: the bird's altitude-floor grid, written by `build-floor.js`.
+- `floor.bin`: the bird's altitude-floor grid, written by `build-floor.ts`. `terrain.bin` and `floor.bin` share one format: a JSON header and typed-array layers, zlib-compressed.
+- Written by the pipeline, read at load: `river.json`, `bridges.json`, `trees.json`, `terrain.bin`, `city.glb`, `water.glb`.
 
 **Coordinate helpers** (`src/geo.ts`): `lonLatToLocal(lon, lat)` and back, so hand-edited route points can be written in lat/lon and converted at load time.
 
@@ -218,7 +221,7 @@ Beats never move the vehicle; they only move the camera around it. This keeps ma
 
 **Manual override.** Input sets a manual target (steer, throttle, climb) applied to the vehicle directly. The controller's blend weight `w` ramps from 0 to 1 over 0.5 s on first input and holds while input continues; after 3 s without input it ramps back to 0 over 2 s. The vehicle target is `lerp(autopilotTarget, manualTarget, w)`. While `w` > 0, the autopilot parameter `s` is re-derived from the vehicle's nearest point on the spline, searched only within 300 m of arc length around the current `s`: the route passes close to itself over Buda and at the Market Hall, and a global search would snap backwards. When control returns, the autopilot continues from where the user actually is. If the vehicle's mode doesn't match the route's mode at that point, autopilot runs the transition first: it takes off at once if the route says bird, or flies back to the route and lands if the route says boat (boat stretches of the route are always on water). Camera beats are suspended while `w` > 0.5 and resume on the next beat boundary.
 
-**Corridor.** The bird is clamped to 300 m lateral distance from the spline, never closer than 50 m to the edge of the world, and to at most 180 m above the water. The lower limit comes from the floor grid (`floor.bin`, 5 m cells holding the highest of terrain, building tops and bridge towers): over land the bird stays at least 15 m above it, and over water the floor is the surface. Bridge cells also store the deck's underside and top, so the bird passes under a bridge if it arrives below the deck and over it otherwise. Pushing against a limit slows and turns the vehicle back (or lifts it, at the floor) rather than stopping it. The boat is clamped inside the river polygon with a 5 m margin, tested by a 2D point-in-polygon check each frame.
+**Corridor.** The bird is clamped to 300 m lateral distance from the spline, never closer than 50 m to the edge of the world, and to at most 180 m above the water. The lower limit comes from the floor grid (`floor.bin`, 5 m cells holding the highest of terrain, building tops, tree crowns and bridge towers): over land the bird stays at least 15 m above it (4 m above a tree crown), and over water the floor is the surface. Bridge decks are tested against their outlines, so the bird passes under a bridge if it arrives below the deck and over it otherwise. Pushing against a limit slows and turns the vehicle back (or lifts it, at the floor) rather than stopping it. The boat is clamped inside the river polygon with a 5 m margin, tested by a 2D point-in-polygon check each frame.
 
 **Landing (bird to boat), 2.0 s.**
 
@@ -245,7 +248,7 @@ Target: 60 fps at 1080p on a 2022 integrated-GPU laptop (high tier), 30 fps on a
 | Triangles in view | 1.5 M | City merged into \~12 meshes (by district and material); heroes ≤ 20k each |
 | Draw calls | 150 in the main pass; ≤ 75 each in the shadow and reflection passes | Merge by material; trees instanced; shadow and reflection passes draw a reduced set; at most 4 real point lights, everything else emissive sprites |
 | Texture memory | 256 MB | KTX2/Basis, 1024² facade atlases, 2048² hero textures, 4096×2048 panoramas; about 190 MB in total when transcoded to a GPU format |
-| Initial download | 25 MB | Draco-compressed glTF; textures streamed after first frame |
+| Initial download | 25 MB | Meshopt-compressed, quantised glTF; textures streamed after first frame |
 | Time to first frame | 3 s | On a 50 Mbps connection. The first frame needs only the first-frame set (procedural sky, water, terrain, city), at most 12 MB, about 2 s; progressive loading with a styled loading screen |
 | Shadow map | 2048² high / 1024² medium / off low | One cascade, fitted to a 600 m box around the camera |
 | Water reflection | 50% resolution planar / probe | Planar reflection costs a second scene pass; use it only near the two money shots (inside the Parliament and Chain Bridge trigger radii) on medium and high; elsewhere a probe, plus streak sprites for night lights |

@@ -20,8 +20,18 @@
         <input id="slider" type="range" min="6" max="24" step="0.01" value="18" aria-label="Time of day" />
       </label>
       <label class="check"><input id="sunset" type="checkbox" checked /> Sunset run</label>
-      <a id="credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>
+      <button id="credit" type="button" aria-haspopup="dialog">© OpenStreetMap contributors</button>
     </div>
+    <dialog id="about" aria-labelledby="about-title">
+      <h2 id="about-title">About Danube Flyover</h2>
+      <p>A flight along the Budapest riverfront, from the Japanese Garden on Margaret Island to the Central Market Hall.</p>
+      <h3>Data</h3>
+      <ul>
+        <li>Buildings, the river, bridges, parks and trees: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>, available under the Open Database Licence (ODbL).</li>
+        <li>Terrain: contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.</li>
+      </ul>
+      <form method="dialog"><button type="submit">Close</button></form>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

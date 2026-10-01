@@ -1,5 +1,6 @@
-// The thin bottom bar (time slider, mode and pilot badges, sunset-run toggle, OSM credit),
-// the fading "take control" hint, and a debug panel toggled with the ` key.
+// The thin bottom bar (time slider, mode and pilot badges, sunset-run toggle, the OSM credit
+// that opens the About overlay), the fading "take control" hint, and a debug panel toggled
+// with the ` key.
 
 import type { Route } from "./route";
 import type { State } from "./state";
@@ -27,7 +28,13 @@ export class Hud {
   private fpsT = 0;
   private fps = 0;
 
-  constructor(st: State, private readonly route: Route, private readonly world: World) {
+  constructor(
+    st: State,
+    private readonly route: Route,
+    private readonly world: World,
+    /** The renderer's per-frame counters (renderer.info.render). */
+    private readonly renderInfo: { calls: number; triangles: number },
+  ) {
     this.slider.value = String(st.timeOfDay);
     this.sunset.checked = st.sunsetRun.enabled;
     this.slider.addEventListener("input", () => {
@@ -36,6 +43,8 @@ export class Hud {
       st.sunsetRun.pausedUntil = st.t + 10;
     });
     this.sunset.addEventListener("change", () => (st.sunsetRun.enabled = this.sunset.checked));
+    const about = $<HTMLDialogElement>("about");
+    $<HTMLButtonElement>("credit").addEventListener("click", () => about.showModal());
   }
 
   update(st: State, dt: number): void {
@@ -77,6 +86,7 @@ export class Hud {
         `beat       ${ap.beat}`,
         `route time ${formatMinutes(ap.routeTime)} / ${formatMinutes(r.totalTime)}`,
         `sun        ${st.sun.elevation.toFixed(1)}°  az ${st.sun.azimuth.toFixed(0)}°`,
+        `draw       ${this.renderInfo.calls} calls, ${(this.renderInfo.triangles / 1e6).toFixed(2)} M triangles (all passes)`,
         `build ms   ${Object.entries(this.world.timings).map(([k, ms]) => `${k} ${ms}`).join(", ")}`,
       ].join("\n");
     }

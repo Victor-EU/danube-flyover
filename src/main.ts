@@ -1,14 +1,16 @@
-// Danube Flyover, M0 grey box: wires the modules into one frame loop.
+// Danube Flyover: loads the world built by the tools/ pipeline and wires the modules into one
+// frame loop.
 // Order per frame: input → autopilot → controller → vehicle → lighting → camera → HUD → render.
 
 import "./style.css";
-import { ACESFilmicToneMapping, PCFShadowMap, SRGBColorSpace, Scene, WebGLRenderer } from "three";
+import { ACESFilmicToneMapping, PCFShadowMap, type PerspectiveCamera, SRGBColorSpace, Scene, WebGLRenderer } from "three";
 import { resetToStart, updateAutopilot } from "./autopilot";
 import { CameraRig } from "./camera";
 import { updateController } from "./controller";
 import { Hud } from "./hud";
 import { Input } from "./input";
 import { Lighting } from "./lighting";
+import { loadWorld } from "./load";
 import { Route, type RouteJson } from "./route";
 import { createState } from "./state";
 import { updateVehicle } from "./vehicle";
@@ -37,13 +39,15 @@ async function main(): Promise<void> {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFShadowMap;
 
+  const loading = document.getElementById("loading")!;
   const res = await fetch("data/route.json");
   if (!res.ok) return fatal(`Couldn't load data/route.json (${res.status}).`);
   const route = new Route((await res.json()) as RouteJson);
+  const { files, models } = await loadWorld((f) => (loading.textContent = `Building Budapest… ${Math.round(f * 100)}%`));
 
-  // Let "Building Budapest…" paint before the synchronous world build (no rAF: it stalls in hidden tabs).
+  // Let the last progress paint before the synchronous world build (no rAF: it stalls in hidden tabs).
   await new Promise((r) => setTimeout(r, 30));
-  const world = buildWorld();
+  const world = buildWorld(files, models);
 
   const scene = new Scene();
   scene.add(world.group);
@@ -58,7 +62,7 @@ async function main(): Promise<void> {
     KeyT: () => (st.ui.sliderVisible = !st.ui.sliderVisible),
     Backquote: () => (st.ui.debug = !st.ui.debug),
   });
-  const hud = new Hud(st, route, world);
+  const hud = new Hud(st, route, world, renderer.info.render);
 
   const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -80,6 +84,8 @@ async function main(): Promise<void> {
     st.autopilot.holdLeft = 0;
     rig.snap();
   };
+  // flyover.camera = someCamera renders from it instead of the rig (for overviews); null restores.
+  const debug: { camera: PerspectiveCamera | null } = { camera: null };
   const frame = (dt: number, draw = true) => {
     st.dt = dt;
     st.t += dt;
@@ -89,18 +95,19 @@ async function main(): Promise<void> {
     updateVehicle(st, world, route, dt);
     lighting.update(st, renderer, rig.focus, rig.camera.position, dt);
     rig.update(st, world, dt);
+    world.landmarks?.update(rig.camera.position);
     vehicleMesh.update(st, dt);
     hud.update(st, dt);
-    if (draw) renderer.render(scene, rig.camera);
+    if (draw) renderer.render(scene, debug.camera ?? rig.camera);
   };
   // flyover.step(seconds) advances the simulation at 30 Hz and renders once (works in hidden tabs).
   const step = (seconds: number) => {
     const n = Math.max(1, Math.round(seconds * 30));
     for (let i = 0; i < n; i++) frame(1 / 30, i === n - 1);
   };
-  Object.assign(window, { flyover: { st, route, world, rig, scene, renderer, jump, step } });
+  Object.assign(window, { flyover: Object.assign(debug, { st, route, world, rig, scene, renderer, jump, step }) });
 
-  document.getElementById("loading")!.hidden = true;
+  loading.hidden = true;
   let last = performance.now();
   renderer.setAnimationLoop((now: number) => {
     const dt = Math.min(0.05, (now - last) / 1000);

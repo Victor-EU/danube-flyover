@@ -2,6 +2,95 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-01 — M1 geography
+
+**Pipeline**
+
+- **The pipeline is TypeScript, run with tsx, not `.js` and `.py` scripts.** That means one language with the runtime, and the tools import the runtime's own modules (`geo`, `river`, `terrain`, `bridges`, `landmarks`), so the pipeline and the app can't disagree about a placement.
+- **It has seven scripts:**
+  - two fetches (`fetch-osm`, `fetch-dem`), whose raw extracts are committed in `tools/osm/` and `tools/dem/`;
+  - five builds (`build-water`, `build-terrain`, `build-bridges`, `build-city`, `build-floor`), all run by `npm run build-world`.
+- **What's missing from the doc's list:**
+  - `build-route.js` is still `npm run timetable`, since the spline is built at load.
+  - `gen-textures.js` is M3.
+- **The builds are deterministic.** A second run gives byte-identical outputs.
+
+**File formats**
+
+- **glTF files use meshopt compression (`EXT_meshopt_compression` plus quantisation), not Draco.** three's loader bundles the meshopt decoder, so there are no wasm decoder files to ship or point at, and it decodes faster.
+- **`city.glb` is 6.1 MB on the wire (2.7 MB if the host gzips it).** All of `public/data/` is 7.1 MB, inside the 12 MB first-frame budget.
+- **The terrain heightmap is `terrain.bin`, not a 16-bit PNG.** Browsers decode PNGs to 8 bits per channel through canvas, which would lose the precision.
+  - `terrain.bin` and `floor.bin` share one small format (`src/world/gridFile.ts`): a JSON header, then typed-array layers, the whole file zlib-compressed.
+  - It's read with fflate in the browser and in Node.
+
+**Terrain**
+
+- **GLO-30 is resampled to 10 m.** The river level is measured from the DEM's own flattened water: 98.0 m above sea level in the north, falling to 97.0 m in the south, and subtracted.
+- **Buda keeps the real hills.**
+  - A morphological opening with a 70 m window removes buildings and trees.
+  - Footprints too wide for it become level pads at the 75th percentile of the ground around them; a mean fill sank the palace toward the slopes below.
+- **Results:**
+  - Castle Hill comes out at 70 m above the river.
+  - Gellért Hill comes out at 128 m. The doc's 135 m sharp summit is lost at 30 m resolution; the DEM itself reads 132 m there.
+- **Pest and the islands are flattened to a heavily smoothed lower envelope.** Pest comes out at about +7 to +8 m (M0 had +4 m) and Margaret Island at +4.5 m.
+- **Next to the banks, the terrain dips under the quay strip, as in M0.**
+
+**Buildings**
+
+- **There are 11,485 buildings in the world rectangle, with heights from three sources:**
+  - 318 have a `height` tag.
+  - 5,773 come from levels: levels × 3.3 m + 1 m + 2 m per roof level.
+  - 5,394 take a default. The doc's 18 m applies except for:
+    - small types (garages, sheds, kiosks), 3.5 m;
+    - houses, 8 m;
+    - churches, 20 m;
+    - industrial, 10 m;
+    - ruins, 4 m.
+- **Skipped:** `building=roof` canopies, construction sites without levels, and `building:part`, since only outlines are used.
+- **They are merged into one mesh per district** (12 districts plus "other", which is mostly Margaret Island). The roofs are flat.
+- **Colours** come from a palette per bank and type, and wall bases are darkened as a cheap ambient occlusion.
+- **For M3:**
+  - UVs are stored in units of 1024 m so they quantise.
+  - A per-building `_SEED` attribute is stored for the emissive jitter.
+
+**Bridges**
+
+- **Deck outlines, river piers and the Chain and Liberty pylons come from OSM.** Deck heights, tower heights and the ironwork style are set by hand in `build-bridges.ts` until M4.
+- **Deck queries test the real outline polygon instead of centreline segments.** That covers the Margaret Bridge's spur onto the island.
+- **The deck ramp rule:** full height over the water and 30 m past the bank, so the quay road passes under, then down at 9% to street level.
+
+**Floor and trees**
+
+- **Tree crowns are in the floor grid, with 4 m of clearance rather than 15 m.** The doc's floor has no trees. Without them the bird flew through the Margaret Island canopy, and 15 m above a crown pushed the opening hover far above the garden.
+- **Bridge towers are flagged as towers only where they stand in the water.** On land they are simply solid.
+- **There are 16,059 trees:** OSM tree points, tree rows, and scatter in woods (11 m spacing), scrub (14 m) and parks (17 m). The quays, pitches, squares, bridges and building footprints are kept clear.
+
+**Landmarks**
+
+- **`landmarks.json` gains two fields:**
+  - `osm`: the OSM buildings the hero replaces, which the filler leaves out.
+  - `placeholder`: the block's heading and parts, the M0 shapes refitted to the OSM footprints.
+- **The four bridges in the route are landmarks without placeholders.** The Árpád Bridge isn't a hero.
+- **Each landmark has a two-line note for M2's cards.**
+- **Labels keep a constant screen size and fade out between 700 and 1300 m.**
+
+**Changes outside the world**
+
+- **The terrain fades out over 2.5 km beyond the world edge** instead of ending in a cliff. The water continues north and south. The doc's backdrop ring (scene layer 7) isn't in any milestone yet.
+- **The About overlay is in:** the credit in the bar opens it, with the OSM and Copernicus credits. The terrain now needs the Copernicus credit as well as OSM's.
+- **Route altitudes changed in four points; the run is still 9:29:**
+  - The start hover rises from 20 to 28 m and the next point from 30 to 34 m, above the tree crowns around the garden.
+  - The two points of the Chain Bridge dive over Buda rise from 86 to 90 m and from 56 to 60 m.
+  - The headless run now has no floor contacts, with tracking within 2.0 m.
+- **The sun's shadow camera is shortened and pauses at night.**
+  - It now sits 1100 m up-sun from the focus and ends 400 m past it.
+  - Shadow-map updates stop while the sun is down, rather than toggling `castShadow`, which would recompile every material.
+  - The shadow pass peaks at 38 draw calls.
+- **Measured at the beat starts:**
+  - Main pass: 28–114 draw calls and 1.0–1.22 M triangles.
+  - Triangles: trees about 480 k, terrain about 370 k, buildings 284 k.
+- **Night is too dark with the real city.** M0's temporary night ambient doesn't carry it; M3's emissive windows and light groups are the fix.
+
 ## 2026-10-01 — M0 grey box
 
 - **The run is 9:29 over 8.6 km.** That's from the real route, so the doc's table was regenerated from `npm run timetable`. The Japanese Garden is at 47.5342 N, further north than estimated, and the Parliament arc and the Buda swing were longer than the estimate. To shorten it: speed up the Margaret Island run or tighten the Buda loop.

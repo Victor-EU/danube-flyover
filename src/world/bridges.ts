@@ -1,7 +1,10 @@
-// Placeholder bridges: deck ribbons that ramp down to street level on land, towers, piers,
-// chains and cables, plus the queries the vehicles need (deck under/over, solid obstacles).
-// Deck lines are the road ways on each bridge in OpenStreetMap (© OpenStreetMap contributors, ODbL).
+// The Danube bridges from public/data/bridges.json (built by tools/build-bridges.ts from
+// OpenStreetMap): deck slabs on their real outlines, river piers, placeholder towers and
+// ironwork until M4's hero models, plus the queries the vehicles need (deck under/over,
+// solid obstacles). The deck sits at full height over the water and the quays, then ramps
+// down to street level on land.
 
+import earcut from "earcut";
 import {
   BoxGeometry,
   BufferAttribute,
@@ -13,77 +16,36 @@ import {
   TubeGeometry,
   Vector3,
 } from "three";
-import { latLonToLocal, type XZ } from "../geo";
-import type { LatLon } from "./osmPlaceholder";
+import { WORLD } from "../config";
+import type { XZ } from "../geo";
 import type { River } from "./river";
+import type { Terrain } from "./terrain";
 
-interface BridgeDef {
+export interface BridgeJson {
   name: string;
-  /** Road centreline across the deck, Buda to Pest. */
-  line: LatLon[];
+  osm: string;
+  /** Deck outline ring, flat [x, z, ...]. */
+  outline: number[];
+  /** Road centreline, Buda to Pest, flat [x, z, ...]. */
+  axis: number[];
   width: number;
-  underside: number;
+  /** Deck top over the water, metres above the river. */
   top: number;
+  thickness: number;
+  ramp: number;
   color: string;
   deckColor: string;
-  towers?: { at: number[] | "banks"; height: number; along: number; thick: number };
-  piers?: { at?: number[]; every?: number };
+  /** Tower centres on the deck, with the deck direction there. */
+  towers: { x: number; z: number; ux: number; uz: number }[];
+  tower?: { height: number; along: number; thick: number };
+  /** River piers as oriented boxes (half extents along u and across it). */
+  piers: { cx: number; cz: number; ux: number; uz: number; halfU: number; halfV: number }[];
   cables?: "chain" | "suspension" | "truss";
 }
 
-const BRIDGES: BridgeDef[] = [
-  {
-    name: "Árpád Bridge",
-    line: [[47.53918, 19.04654], [47.5363, 19.05849]],
-    width: 34, underside: 10, top: 12,
-    color: "#8f918c", deckColor: "#7d7f7a",
-    piers: { every: 70 },
-  },
-  {
-    name: "Margaret Bridge",
-    line: [[47.51471, 19.0386], [47.51478, 19.04352], [47.51329, 19.04779]],
-    width: 26, underside: 9, top: 11,
-    color: "#b9b07a", deckColor: "#a49c6c",
-    piers: { at: [0.17, 0.3, 0.43, 0.56, 0.7, 0.83] },
-  },
-  {
-    name: "Chain Bridge",
-    line: [[47.49846, 19.04101], [47.49951, 19.04642]],
-    width: 16, underside: 9.5, top: 11.5,
-    color: "#cdbf9d", deckColor: "#5f5c55",
-    towers: { at: [0.235, 0.705], height: 48, along: 12, thick: 7 },
-    piers: { at: [0.235, 0.705] },
-    cables: "chain",
-  },
-  {
-    name: "Elisabeth Bridge",
-    line: [[47.4901, 19.04694], [47.49085, 19.04904], [47.49182, 19.05185], [47.49214, 19.05285]],
-    width: 27, underside: 10, top: 12.5,
-    color: "#ecebe6", deckColor: "#d9d8d2",
-    towers: { at: "banks", height: 38, along: 6, thick: 5 },
-    cables: "suspension",
-  },
-  {
-    name: "Liberty Bridge",
-    line: [[47.48479, 19.05318], [47.48661, 19.05673]],
-    width: 20, underside: 10, top: 12,
-    color: "#4e7f5d", deckColor: "#45705a",
-    towers: { at: [0.236, 0.758], height: 27, along: 3, thick: 3 },
-    piers: { at: [0.236, 0.758] },
-    cables: "truss",
-  },
-];
-
-export interface DeckSeg {
-  bridge: number;
-  ax: number;
-  az: number;
-  ux: number;
-  uz: number;
-  len: number;
-  halfWidth: number;
-  underside: number;
-  top: number;
+export interface BridgesJson {
+  license: string;
+  bridges: BridgeJson[];
 }
 
 /** A solid block in the water or on the deck (oriented box footprint). */
@@ -105,146 +67,183 @@ export interface DeckHit {
   top: number;
 }
 
-const smoothstep = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
+/** Over land the deck stays level this far past the bank (over the quay road), then descends. */
+const LEVEL_PAST_BANK = 30;
+const RAMP_SLOPE = 0.09;
 
-interface Sample {
-  x: number;
-  z: number;
-  ux: number;
-  uz: number;
-  t: number; // fraction of the original line length
-  wet: boolean;
-  top: number;
+interface Deck {
+  def: BridgeJson;
+  ring: Float64Array;
+  box: [number, number, number, number];
 }
 
 export class Bridges {
   readonly group = new Group();
-  readonly decks: DeckSeg[] = [];
-  /** Every deck segment including the land approaches (for keeping buildings off the ramps). */
-  readonly footprints: DeckSeg[] = [];
   readonly obstacles: Obstacle[] = [];
-  readonly names = BRIDGES.map((b) => b.name);
+  readonly names: string[];
+  private readonly decks: Deck[];
 
-  constructor(river: River) {
-    BRIDGES.forEach((def, id) => this.build(def, id, river));
+  constructor(data: BridgesJson, private readonly river: River, private readonly terrain: Terrain, withMeshes = true) {
+    this.names = data.bridges.map((b) => b.name);
+    this.decks = data.bridges.map((def) => {
+      const ring = Float64Array.from(def.outline);
+      const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < ring.length; i += 2) {
+        box[0] = Math.min(box[0], ring[i]);
+        box[1] = Math.min(box[1], ring[i + 1]);
+        box[2] = Math.max(box[2], ring[i]);
+        box[3] = Math.max(box[3], ring[i + 1]);
+      }
+      return { def, ring, box };
+    });
+    for (const d of this.decks) this.build(d, withMeshes);
   }
 
-  private build(def: BridgeDef, id: number, river: River): void {
-    const pts = def.line.map(latLonToLocal);
-    const samples = sampleLine(pts, 6, 50);
-    for (const s of samples) s.wet = river.isWater(s.x, s.z);
-    // Deck height: full over water, ramping to street level within 60 m on land.
-    let dist = Infinity;
-    const dry = samples.map(() => Infinity);
-    for (let i = 0; i < samples.length; i++) {
-      dist = samples[i].wet ? 0 : dist + 6;
-      dry[i] = dist;
-    }
-    dist = Infinity;
-    for (let i = samples.length - 1; i >= 0; i--) {
-      dist = samples[i].wet ? 0 : dist + 6;
-      dry[i] = Math.min(dry[i], dist);
-    }
-    samples.forEach((s, i) => (s.top = def.top + (4.7 - def.top) * smoothstep(0, 60, dry[i])));
-    const thickness = def.top - def.underside;
+  /** Deck top at (x, z) for a bridge: full height over the water, ramping to the street on land. */
+  topAt(def: BridgeJson, x: number, z: number): number {
+    if (this.river.isWater(x, z)) return def.top;
+    // Past this distance from the bank every deck has reached the street.
+    const reach = LEVEL_PAST_BANK + def.top / RAMP_SLOPE;
+    const d = this.river.nearestBank(x, z, reach)?.d ?? reach;
+    const ground = Math.max(this.terrain.heightAt(x, z), WORLD.quayHeight) + 0.3;
+    return Math.max(ground, def.top - RAMP_SLOPE * Math.max(0, d - LEVEL_PAST_BANK));
+  }
 
-    const deckMat = new MeshStandardMaterial({ color: def.deckColor, roughness: 0.8, flatShading: true });
+  private build(deck: Deck, withMeshes: boolean): void {
+    const def = deck.def;
     const mat = new MeshStandardMaterial({ color: def.color, roughness: 0.7, flatShading: true });
-    const deck = new Mesh(deckRibbon(samples, def.width, thickness), deckMat);
-    deck.castShadow = deck.receiveShadow = true;
-    this.group.add(deck);
-
-    for (let i = 0; i < samples.length - 1; i++) {
-      const a = samples[i];
-      const b = samples[i + 1];
-      const seg: DeckSeg = {
-        bridge: id,
-        ax: a.x,
-        az: a.z,
-        ux: a.ux,
-        uz: a.uz,
-        len: Math.hypot(b.x - a.x, b.z - a.z),
-        halfWidth: def.width / 2,
-        underside: Math.min(a.top, b.top) - thickness,
-        top: Math.max(a.top, b.top),
-      };
-      this.footprints.push(seg);
-      if (a.wet || b.wet) this.decks.push(seg);
+    if (withMeshes) {
+      const m = new Mesh(this.deckGeometry(def), new MeshStandardMaterial({ color: def.deckColor, roughness: 0.8, flatShading: true }));
+      m.castShadow = m.receiveShadow = true;
+      m.name = def.name;
+      this.group.add(m);
     }
 
-    const at =(t: number): Sample => {
-      let best = samples[0];
-      for (const s of samples) if (Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
-      return best;
-    };
-
-    // Piers under the deck.
-    const pierAt: Sample[] = [];
-    if (def.piers?.at) for (const t of def.piers.at) pierAt.push(at(t));
-    if (def.piers?.every) {
-      const step = Math.round(def.piers.every / 6);
-      for (let i = step; i < samples.length; i += step) pierAt.push(samples[i]);
-    }
-    for (const s of pierAt) {
-      if (!s.wet) continue;
-      this.addBlock(mat, s, 9, def.width + 4, -2, s.top - thickness, false);
+    for (const p of def.piers) {
+      const underside = this.topAt(def, p.cx, p.cz) - def.thickness;
+      this.addBlock(mat, p.cx, p.cz, p.ux, p.uz, p.halfU * 2, p.halfV * 2, -2, underside, false, withMeshes);
     }
 
-    // Towers: a pillar each side of the deck and a lintel on top.
-    const towerAt: Sample[] = [];
-    if (def.towers) {
-      if (def.towers.at === "banks") {
-        const first = samples.findIndex((s) => s.wet);
-        let last = -1;
-        samples.forEach((s, i) => s.wet && (last = i));
-        if (first > 0) towerAt.push(samples[first - 1]);
-        if (last >= 0 && last < samples.length - 1) towerAt.push(samples[last + 1]);
-      } else {
-        for (const t of def.towers.at) towerAt.push(at(t));
-      }
-      const tw = def.towers;
-      for (const s of towerAt) {
-        const off = def.width / 2 + tw.thick / 2;
-        for (const side of [-1, 1]) {
-          const p = { ...s, x: s.x - s.uz * off * side, z: s.z + s.ux * off * side };
-          this.addBlock(mat, p, tw.along, tw.thick, -2, tw.height, true);
-        }
+    const tw = def.tower;
+    if (!tw) return;
+    // Order the towers Buda to Pest along the axis, for the cables.
+    const a0 = { x: def.axis[0], z: def.axis[1] };
+    const towers = [...def.towers].sort((p, q) => Math.hypot(p.x - a0.x, p.z - a0.z) - Math.hypot(q.x - a0.x, q.z - a0.z));
+    for (const t of towers) {
+      const off = def.width / 2 + tw.thick / 2;
+      for (const side of [-1, 1])
+        this.addBlock(mat, t.x - t.uz * off * side, t.z + t.ux * off * side, t.ux, t.uz, tw.along, tw.thick, -2, tw.height, true, withMeshes);
+      if (withMeshes) {
         const lintel = new Mesh(new BoxGeometry(def.width + tw.thick * 2, 4, tw.along), mat);
-        lintel.position.set(s.x, tw.height - 2, s.z);
-        lintel.rotation.y = Math.atan2(s.ux, s.uz);
+        lintel.position.set(t.x, tw.height - 2, t.z);
+        lintel.rotation.y = Math.atan2(t.ux, t.uz);
         lintel.castShadow = true;
         this.group.add(lintel);
       }
     }
-
-    if (def.cables && towerAt.length === 2) this.addCables(def, samples, towerAt);
+    if (withMeshes && def.cables && towers.length === 2) this.addCables(def, towers, mat);
   }
 
-  private addBlock(mat: MeshStandardMaterial, s: XZ & { ux: number; uz: number }, along: number, across: number, y0: number, y1: number, tower: boolean): void {
-    const m = new Mesh(new BoxGeometry(across, y1 - y0, along), mat);
-    m.position.set(s.x, (y0 + y1) / 2, s.z);
-    // Box depth (local z) runs along the deck.
-    m.rotation.y = Math.atan2(s.ux, s.uz);
-    m.castShadow = m.receiveShadow = true;
-    this.group.add(m);
-    this.obstacles.push({ cx: s.x, cz: s.z, ux: s.ux, uz: s.uz, halfAlong: along / 2, halfAcross: across / 2, top: y1, tower });
+  /** The deck slab: the outline triangulated with extra points so the ramps bend smoothly. */
+  private deckGeometry(def: BridgeJson): BufferGeometry {
+    const ring: XZ[] = [];
+    const n = def.outline.length / 2;
+    for (let i = 0; i < n; i++) {
+      const a = { x: def.outline[i * 2], z: def.outline[i * 2 + 1] };
+      const b = { x: def.outline[((i + 1) % n) * 2], z: def.outline[((i + 1) % n) * 2 + 1] };
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 4));
+      for (let k = 0; k < steps; k++) ring.push({ x: a.x + ((b.x - a.x) * k) / steps, z: a.z + ((b.z - a.z) * k) / steps });
+    }
+    const flat: number[] = [];
+    for (const p of ring) flat.push(p.x, p.z);
+    const holes: number[] = [];
+    const inside = (x: number, z: number) => {
+      let r = false;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const xi = def.outline[i * 2];
+        const zi = def.outline[i * 2 + 1];
+        const xj = def.outline[j * 2];
+        const zj = def.outline[j * 2 + 1];
+        if (zi <= z !== zj <= z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) r = !r;
+      }
+      return r;
+    };
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (const p of ring) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minZ = Math.min(minZ, p.z);
+      maxZ = Math.max(maxZ, p.z);
+    }
+    for (let z = Math.ceil(minZ / 6) * 6; z < maxZ; z += 6)
+      for (let x = Math.ceil(minX / 6) * 6; x < maxX; x += 6) {
+        if (!inside(x, z)) continue;
+        if (ring.some((p) => Math.hypot(p.x - x, p.z - z) < 2.5)) continue;
+        holes.push(flat.length / 2);
+        flat.push(x, z);
+      }
+    const tris = earcut(flat, holes, 2);
+    const top = (k: number) => this.topAt(def, flat[k * 2], flat[k * 2 + 1]);
+    const tops = Array.from({ length: flat.length / 2 }, (_, k) => top(k));
+    const pos: number[] = [];
+    const vtx = (k: number, dy: number) => pos.push(flat[k * 2], tops[k] + dy, flat[k * 2 + 1]);
+    for (let t = 0; t < tris.length; t += 3) {
+      const [a, b, c] = [tris[t], tris[t + 1], tris[t + 2]];
+      const cross = (flat[b * 2] - flat[a * 2]) * (flat[c * 2 + 1] - flat[a * 2 + 1]) - (flat[b * 2 + 1] - flat[a * 2 + 1]) * (flat[c * 2] - flat[a * 2]);
+      const [p, q] = cross < 0 ? [b, c] : [c, b]; // top faces up
+      vtx(a, 0), vtx(p, 0), vtx(q, 0);
+      vtx(a, -def.thickness), vtx(q, -def.thickness), vtx(p, -def.thickness);
+    }
+    // Side faces along the outline (the first ring.length points of `flat`), wound to face out.
+    let area = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += ring[j].x * ring[i].z - ring[i].x * ring[j].z;
+    for (let i = 0; i < ring.length; i++) {
+      let j = (i + 1) % ring.length;
+      let k = i;
+      if (area < 0) [k, j] = [j, k];
+      const [xa, za, xb, zb] = [flat[k * 2], flat[k * 2 + 1], flat[j * 2], flat[j * 2 + 1]];
+      const [ta, tb] = [tops[k], tops[j]];
+      const [ba, bb] = [ta - def.thickness, tb - def.thickness];
+      pos.push(xa, ba, za, xb, tb, zb, xb, bb, zb, xa, ba, za, xa, ta, za, xb, tb, zb);
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
+    geo.computeVertexNormals();
+    return geo;
   }
 
-  private addCables(def: BridgeDef, samples: Sample[], towers: Sample[]): void {
-    const tw = def.towers!;
-    const ends = [samples.find((s) => s.top > def.top - 0.5) ?? samples[0], [...samples].reverse().find((s) => s.top > def.top - 0.5) ?? samples[samples.length - 1]];
+  private addBlock(mat: MeshStandardMaterial, cx: number, cz: number, ux: number, uz: number, along: number, across: number, y0: number, y1: number, tower: boolean, withMesh: boolean): void {
+    if (withMesh) {
+      const m = new Mesh(new BoxGeometry(across, y1 - y0, along), mat);
+      m.position.set(cx, (y0 + y1) / 2, cz);
+      // Box depth (local z) runs along (ux, uz).
+      m.rotation.y = Math.atan2(ux, uz);
+      m.castShadow = m.receiveShadow = true;
+      this.group.add(m);
+    }
+    this.obstacles.push({ cx, cz, ux, uz, halfAlong: along / 2, halfAcross: across / 2, top: y1, tower });
+  }
+
+  private addCables(def: BridgeJson, towers: BridgeJson["towers"], mat0: MeshStandardMaterial): void {
+    const tw = def.tower!;
+    // Deck ends: where the axis first and last reaches full deck height.
+    const axis: XZ[] = [];
+    for (let i = 0; i < def.axis.length / 2 - 1; i++) {
+      const a = { x: def.axis[i * 2], z: def.axis[i * 2 + 1] };
+      const b = { x: def.axis[i * 2 + 2], z: def.axis[i * 2 + 3] };
+      const l = Math.hypot(b.x - a.x, b.z - a.z);
+      for (let d = 0; d < l; d += 2) axis.push({ x: a.x + ((b.x - a.x) * d) / l, z: a.z + ((b.z - a.z) * d) / l });
+    }
+    const full = axis.filter((p) => this.topAt(def, p.x, p.z) > def.top - 0.5);
+    if (full.length < 2) return;
+    const ends = [full[0], full[full.length - 1]];
     const anchors = [ends[0], towers[0], towers[1], ends[1]];
     const deckY = def.top + 1;
     const peakY = def.cables === "truss" ? def.top + 14 : tw.height - 3;
     const lowY = def.cables === "truss" ? def.top + 2.5 : deckY + 2;
-    const mat = new MeshStandardMaterial({
-      color: def.cables === "chain" ? "#3b3a37" : def.color,
-      roughness: 0.6,
-      flatShading: true,
-    });
+    const mat = def.cables === "chain" ? new MeshStandardMaterial({ color: "#3b3a37", roughness: 0.6, flatShading: true }) : mat0;
+    const ux = towers[0].ux;
+    const uz = towers[0].uz;
     for (const side of [-1, 1]) {
       const off = def.width / 2 + 0.6;
       const pts: Vector3[] = [];
@@ -256,13 +255,7 @@ export class Bridges {
         for (let i = k === 0 ? 0 : 1; i <= 12; i++) {
           const u = i / 12;
           const sag = (k === 1 ? peakY - lowY : (peakY - deckY) * 0.35) * 4 * u * (1 - u);
-          pts.push(
-            new Vector3(
-              a.x + (b.x - a.x) * u - a.uz * off * side,
-              ya + (yb - ya) * u - sag,
-              a.z + (b.z - a.z) * u + a.ux * off * side,
-            ),
-          );
+          pts.push(new Vector3(a.x + (b.x - a.x) * u - uz * off * side, ya + (yb - ya) * u - sag, a.z + (b.z - a.z) * u + ux * off * side));
         }
       }
       const tube = new Mesh(new TubeGeometry(new CatmullRomCurve3(pts), 120, def.cables === "chain" ? 0.7 : 0.5, 5), mat);
@@ -271,24 +264,30 @@ export class Bridges {
     }
   }
 
-  /** True if (x, z) is within `margin` of any deck or approach ramp. */
-  onFootprint(x: number, z: number, margin: number): boolean {
-    return hitSeg(this.footprints, x, z, margin) !== null;
-  }
-
-  /** The deck over (x, z), widened across by `margin`, if any. */
+  /** The deck over (x, z), its outline grown by `margin`, if any. */
   deckAt(x: number, z: number, margin: number): DeckHit | null {
-    const d = hitSeg(this.decks, x, z, margin);
-    return d ? { bridge: d.bridge, underside: d.underside, top: d.top } : null;
+    for (let id = 0; id < this.decks.length; id++) {
+      const { def, ring, box } = this.decks[id];
+      if (x < box[0] - margin || x > box[2] + margin || z < box[1] - margin || z > box[3] + margin) continue;
+      if (!inRing(ring, x, z) && (margin <= 0 || ringDistance(ring, x, z) > margin)) continue;
+      const top = this.topAt(def, x, z);
+      return { bridge: id, underside: top - def.thickness, top };
+    }
+    return null;
   }
 
-  /** Distance ahead (along fx, fz) to the nearest deck edge within `range`, or null. */
+  /** Distance ahead (along fx, fz) to the nearest deck within `range`, or null. */
   deckAhead(x: number, z: number, fx: number, fz: number, range: number): (DeckHit & { dist: number }) | null {
     for (let d = 0; d <= range; d += 4) {
       const hit = this.deckAt(x + fx * d, z + fz * d, 0);
       if (hit) return { ...hit, dist: d };
     }
     return null;
+  }
+
+  /** True if (x, z) is within `margin` of any deck outline. */
+  onFootprint(x: number, z: number, margin: number): boolean {
+    return this.deckAt(x, z, margin) !== null;
   }
 
   /** Push (x, z) out of any obstacle whose top is above `y`. Returns the push or null. */
@@ -309,72 +308,29 @@ export class Bridges {
   }
 }
 
-function hitSeg(segs: DeckSeg[], x: number, z: number, margin: number): DeckSeg | null {
-  for (const d of segs) {
-    const rx = x - d.ax;
-    const rz = z - d.az;
-    const along = rx * d.ux + rz * d.uz;
-    if (along < -margin || along > d.len + margin) continue;
-    if (Math.abs(-rx * d.uz + rz * d.ux) <= d.halfWidth + margin) return d;
+function inRing(ring: Float64Array, x: number, z: number): boolean {
+  let inside = false;
+  const n = ring.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = ring[i * 2];
+    const zi = ring[i * 2 + 1];
+    const xj = ring[j * 2];
+    const zj = ring[j * 2 + 1];
+    if (zi <= z !== zj <= z && x < xi + ((z - zi) / (zj - zi)) * (xj - xi)) inside = !inside;
   }
-  return null;
+  return inside;
 }
 
-/** Points every `step` m along a polyline, extended straight by `extend` m at both ends for approach ramps. */
-function sampleLine(pts: XZ[], step: number, extend: number): Sample[] {
-  const n = pts.length;
-  const segLen = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.z - pts[i].z));
-  const total = segLen.reduce((a, b) => a + b, 0);
-  const dir = (i: number) => ({ ux: (pts[i + 1].x - pts[i].x) / segLen[i], uz: (pts[i + 1].z - pts[i].z) / segLen[i] });
-  const out: Sample[] = [];
-  for (let s = -extend; s <= total + extend + 1e-6; s += step) {
-    let x: number;
-    let z: number;
-    let u: { ux: number; uz: number };
-    if (s <= 0) {
-      u = dir(0);
-      x = pts[0].x + u.ux * s;
-      z = pts[0].z + u.uz * s;
-    } else if (s >= total) {
-      u = dir(n - 2);
-      x = pts[n - 1].x + u.ux * (s - total);
-      z = pts[n - 1].z + u.uz * (s - total);
-    } else {
-      let rem = s;
-      let i = 0;
-      while (i < segLen.length - 1 && rem > segLen[i]) rem -= segLen[i++];
-      u = dir(i);
-      x = pts[i].x + u.ux * rem;
-      z = pts[i].z + u.uz * rem;
-    }
-    out.push({ x, z, ux: u.ux, uz: u.uz, t: Math.min(Math.max(s / total, 0), 1), wet: false, top: 0 });
+function ringDistance(ring: Float64Array, x: number, z: number): number {
+  let best = Infinity;
+  const n = ring.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const ax = ring[j * 2];
+    const az = ring[j * 2 + 1];
+    const ex = ring[i * 2] - ax;
+    const ez = ring[i * 2 + 1] - az;
+    const t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez || 1)));
+    best = Math.min(best, Math.hypot(ax + ex * t - x, az + ez * t - z));
   }
-  return out;
-}
-
-/** A box-section ribbon along the samples: top, bottom and both sides. */
-function deckRibbon(samples: Sample[], width: number, thickness: number): BufferGeometry {
-  const hw = width / 2;
-  const pos: number[] = [];
-  const quad = (a: number[], b: number[], c: number[], d: number[]) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
-  for (let i = 0; i < samples.length - 1; i++) {
-    const s0 = samples[i];
-    const s1 = samples[i + 1];
-    const L0 = [s0.x - s0.uz * hw, s0.z + s0.ux * hw];
-    const R0 = [s0.x + s0.uz * hw, s0.z - s0.ux * hw];
-    const L1 = [s1.x - s1.uz * hw, s1.z + s1.ux * hw];
-    const R1 = [s1.x + s1.uz * hw, s1.z - s1.ux * hw];
-    const t0 = s0.top;
-    const t1 = s1.top;
-    const b0 = t0 - thickness;
-    const b1 = t1 - thickness;
-    quad([L0[0], t0, L0[1]], [L1[0], t1, L1[1]], [R1[0], t1, R1[1]], [R0[0], t0, R0[1]]); // top
-    quad([R0[0], b0, R0[1]], [R1[0], b1, R1[1]], [L1[0], b1, L1[1]], [L0[0], b0, L0[1]]); // bottom
-    quad([L0[0], b0, L0[1]], [L1[0], b1, L1[1]], [L1[0], t1, L1[1]], [L0[0], t0, L0[1]]); // left
-    quad([R0[0], t0, R0[1]], [R1[0], t1, R1[1]], [R1[0], b1, R1[1]], [R0[0], b0, R0[1]]); // right
-  }
-  const geo = new BufferGeometry();
-  geo.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
-  geo.computeVertexNormals();
-  return geo;
+  return best;
 }

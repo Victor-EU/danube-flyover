@@ -12,6 +12,7 @@ export class Input {
 
   constructor(target: HTMLElement, hotkeys: Record<string, () => void>) {
     window.addEventListener("keydown", (e) => {
+      if (document.querySelector("dialog[open]")) return; // the About overlay has the keyboard
       const inField = e.target instanceof HTMLInputElement;
       if (inField && e.code.startsWith("Arrow")) return; // let the slider have its arrows
       if (hotkeys[e.code] && !e.repeat) {
