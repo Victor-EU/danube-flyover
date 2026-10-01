@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Danube Flyover</title>
+    <meta name="description" content="Fly as a bird along the Budapest riverfront, land on the Danube and carry on as a boat." />
+  </head>
+  <body>
+    <canvas id="view" aria-label="Danube Flyover 3D view"></canvas>
+    <div id="loading">Building Budapest…</div>
+    <div id="fatal" hidden></div>
+    <div id="hint">Steer to take control: W/S speed · A/D turn · Q/E down/up · or drag</div>
+    <pre id="debug" hidden></pre>
+    <div id="bar">
+      <span id="mode" class="badge" data-mode="bird">Bird</span>
+      <span id="pilot" class="badge">Autopilot</span>
+      <label id="time" title="Time of day (T to hide)">
+        <span id="clock">18:00</span>
+        <input id="slider" type="range" min="6" max="24" step="0.01" value="18" aria-label="Time of day" />
+      </label>
+      <label class="check"><input id="sunset" type="checkbox" checked /> Sunset run</label>
+      <a id="credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
