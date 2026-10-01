@@ -2,6 +2,72 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-01 — M2 autopilot
+
+**Camera**
+
+- **Camera modes are keyed on route points, not on beats.** A point can carry `camera: {mode, target?}`, and the mode holds until the next key.
+  - Why: the bridge under-passes and the Market Hall circle fall in the middle of beats. A point stays valid when the route is edited, where a `duration` in seconds goes stale.
+  - The doc's `cameraMode`, `target` and `duration` fields on the beat are not used. `reveal` catches up by the next key instead of over a duration.
+  - There are 12 keys (see `npm run timetable`).
+- **`low` switches on by itself under bridge decks**, for both the autopilot and the user, rather than being keyed. The bird's 4 m-up follow camera would otherwise sit inside the deck. It lingers for 0.5 s after the deck.
+- **`orbit` swings the rig around the vehicle only as far as it needs to.**
+  - It keeps the target within 34° of the vehicle and aims halfway between them, so both stay in frame.
+  - It never goes more than 75° from straight behind. Leaving an orbit is a 1.5 s swing, and at 97° that read as a whip pan.
+  - The boat orbits from 11 m back rather than its 6 m follow distance.
+- **Three orbits come from the beat descriptions, not the doc's camera list:**
+  - Beat 5 orbits Parliament, which puts the Bastion in the foreground.
+  - Beat 7 orbits Buda Castle ("towering above on the right").
+  - Beat 8 orbits the Liberty Statue ("high on the right").
+- **The Market Hall finish is `reveal` (the climb out of Liberty Bridge), then `orbit` for the circle.**
+- **Mode changes blend from wherever the camera is,** in the vehicle's frame: yaw offset, distance, height, look point and field of view. A change in the middle of a blend doesn't jump.
+- **Hand-back:** camera keys stay suspended until the next key is reached, which stands in for the doc's "next beat boundary".
+
+**Cards**
+
+- **Trigger radii widened for the landmarks on the banks:**
+  - Academy 250 m, Gresham 400 m, Buda Castle 450 m, Liberty Statue 450 m, Vigadó 500 m, Citadella 500 m, Gellért Hotel 500 m.
+  - The doc's range is 150 to 400 m, but the boat runs mid-river, 300 to 420 m from them, and the 40° view test only passes once they are well ahead.
+- **A hands-off run shows 16 of the 17 cards.** The Gresham Palace loses to the Chain Bridge, which is nearer the centre of the view, and has passed by the time that card is gone. That is the doc's rule working.
+- **Layout:** cards sit at the top right, clear of the bar and the debug panel.
+- **An opened card stays until it is closed** (× or Esc), and its 8 s timer stops while it's open.
+- **The opened card shows an illustration placeholder, with the note standing in for the paragraph,** until M4's illustrations and text.
+- **Cards trigger in manual flight and while paused too.** The rule is about the vehicle and the camera, not the pilot.
+
+**Pause, jumps and the loop**
+
+- **Pause:**
+  - The boat idles down to a stop: its minimum speed is 0 while paused.
+  - The bird circles at minimum speed on a 60 m radius, turning the way it already was.
+  - The sunset-run clock stops.
+  - Pausing during the opening hover ends the hover.
+- **Resuming hands control back at once** (a 2 s blend), without the 3 s idle wait. Pressing play means "carry on with the tour".
+- **Space is always pause.** A focused button or checkbox doesn't also click on Space.
+- **The sunset-run clock eases toward the route's clock** (1.5 s time constant) instead of following it exactly. Resuming or handing back far from where the user took over no longer snaps the lighting. Cuts (the loop, jumps) set it directly.
+- **1–9 and 0 jump to beats 1–10 through black** (0.3 s out, 0.5 s in).
+  - A jump hands control to the autopilot and keeps the pause state.
+  - It snaps the camera and clears the cards.
+- **The loop:**
+  - Past the last point, the autopilot flies the circle through the route's last three points, at the last altitude and speed.
+  - After 5 s it fades to black over 1 s, resets to the Japanese Garden (17:30 in the sunset run) and fades back in over 1.2 s during the 2 s hover.
+  - Any input or a pause cancels the end circle.
+
+**Code and checks**
+
+- **Two new modules:** `cards` (the trigger rules, with no DOM; `hud` draws the card) and `tour` (the loop and the jumps). Both are in the doc's module table.
+- **One simulation step (`src/sim.ts`) is shared by the browser and `tools/simulate.ts`.** It runs the autopilot, controller, vehicle, camera, cards and loop.
+- **`npm run simulate` now runs 23 checks.** It flies the hands-off tour through the loop, then scripts pause (bird and boat), both hand-back mode rules, and the jumps.
+  - Results: tracking within 2.0 m, no floor contacts, the loop black 5.98 s after the route ends, landing on hand-back, and take-off 4.0 s after release.
+
+**Bugs fixed**
+
+- **The boat's lamp was a shadow-casting point light inside the boat's group.** The vehicle mesh's `castShadow` traverse had reached it.
+  - The group is hidden while flying, which drops the light from three's light list, so every landing added a light and recompiled every material.
+  - At night the shadow pass is paused, so the lamp's shadow map was never created. Every standard-material draw then failed (`GL_INVALID_OPERATION`, sampler mismatch), and the boat leg rendered black apart from the labels.
+  - The same code was in M1, whose landing is after sunset, so this is probably part of what M1 logged as "night is too dark".
+  - The fix: the lamp now hangs off the always-visible vehicle group and casts no shadow, so the light count never changes.
+- **The sun's shadow map is rendered at least once, even when the first frame is at night.** Before this, a jump straight to a night beat before any daylight frame left it missing, with the same black result.
+
 ## 2026-10-01 — M1 geography
 
 **Pipeline**

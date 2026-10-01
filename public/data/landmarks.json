@@ -32,7 +32,7 @@
       ] }
     },
     {
-      "id": "academy", "name": "Academy of Sciences", "position": { "lat": 47.50127, "lon": 19.04643 }, "triggerRadius": 150,
+      "id": "academy", "name": "Academy of Sciences", "position": { "lat": 47.50127, "lon": 19.04643 }, "triggerRadius": 250,
       "model": null, "illustration": null,
       "note": "The Hungarian Academy of Sciences, founded in 1825 by Count István Széchenyi. Its neo-Renaissance seat opened in 1865.",
       "osm": ["relation/11772"],
@@ -41,7 +41,7 @@
       ] }
     },
     {
-      "id": "gresham", "name": "Gresham Palace", "position": { "lat": 47.49982, "lon": 19.04807 }, "triggerRadius": 150,
+      "id": "gresham", "name": "Gresham Palace", "position": { "lat": 47.49982, "lon": 19.04807 }, "triggerRadius": 400,
       "model": null, "illustration": null,
       "note": "An Art Nouveau office building of 1906, facing the Chain Bridge across Széchenyi tér. It is now a hotel.",
       "osm": ["relation/11847"],
@@ -85,7 +85,7 @@
       ] }
     },
     {
-      "id": "palace", "name": "Buda Castle", "position": { "lat": 47.49577, "lon": 19.03961 }, "triggerRadius": 350,
+      "id": "palace", "name": "Buda Castle", "position": { "lat": 47.49577, "lon": 19.03961 }, "triggerRadius": 450,
       "model": null, "illustration": null,
       "note": "The royal palace of the Hungarian kings, rebuilt many times. It now houses the National Gallery and the National Széchényi Library.",
       "osm": ["relation/6486918"],
@@ -96,7 +96,7 @@
       ] }
     },
     {
-      "id": "vigado", "name": "Vigadó", "position": { "lat": 47.49599, "lon": 19.04956 }, "triggerRadius": 150,
+      "id": "vigado", "name": "Vigadó", "position": { "lat": 47.49599, "lon": 19.04956 }, "triggerRadius": 500,
       "model": null, "illustration": null,
       "note": "Pest's concert hall, designed by Frigyes Feszl and opened in 1865, on the Danube Promenade.",
       "osm": ["way/24038230"],
@@ -110,7 +110,7 @@
       "note": "Named after Queen Elisabeth. The white suspension bridge of 1964 replaced the original, destroyed in 1945."
     },
     {
-      "id": "citadella", "name": "Citadella", "position": { "lat": 47.48699, "lon": 19.04627 }, "triggerRadius": 300,
+      "id": "citadella", "name": "Citadella", "position": { "lat": 47.48699, "lon": 19.04627 }, "triggerRadius": 500,
       "model": null, "illustration": null,
       "note": "A fortress the Habsburgs built on the summit of Gellért Hill in 1851–54, after the revolution of 1848–49.",
       "placeholder": { "heading": 90, "parts": [
@@ -118,7 +118,7 @@
       ] }
     },
     {
-      "id": "libertyStatue", "name": "Liberty Statue", "position": { "lat": 47.48674, "lon": 19.04803 }, "triggerRadius": 250,
+      "id": "libertyStatue", "name": "Liberty Statue", "position": { "lat": 47.48674, "lon": 19.04803 }, "triggerRadius": 450,
       "model": null, "illustration": null,
       "note": "Zsigmond Kisfaludi Strobl's 14 m statue of 1947, holding up a palm leaf above the city from Gellért Hill.",
       "placeholder": { "heading": 0, "parts": [
@@ -127,7 +127,7 @@
       ] }
     },
     {
-      "id": "gellertHotel", "name": "Gellért Hotel and Baths", "position": { "lat": 47.48384, "lon": 19.05221 }, "triggerRadius": 200,
+      "id": "gellertHotel", "name": "Gellért Hotel and Baths", "position": { "lat": 47.48384, "lon": 19.05221 }, "triggerRadius": 500,
       "model": null, "illustration": null,
       "note": "An Art Nouveau spa hotel at the foot of Gellért Hill, opened in 1918.",
       "osm": ["way/46769968"],

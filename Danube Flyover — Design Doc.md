@@ -62,8 +62,8 @@ The app opens in autopilot at golden hour, hovering above the Japanese Garden, a
 
 - Autopilot is the default state. Any steering input (keys, mouse drag, touch drag) blends control to the user over 0.5 s.
 - After 3 s without input, control blends back to autopilot over 2 s. Autopilot re-joins the spline from the current position rather than snapping; if the vehicle is in a different mode from the route at that point, autopilot runs the transition first (see Manual override).
-- Pause stops the autopilot and leaves the user in free control where they are: the boat idles, and the bird, which can't hover, circles at minimum speed until the user steers. Control never blends back while paused.
-- Keyboard: W/S speed, A/D steer, Q/E altitude (bird; Q descends), Space pause, T toggles the time slider, 1–9 and 0 jump to beats 1–10.
+- Pause stops the autopilot and leaves the user in free control where they are: the boat idles to a stop, and the bird, which can't hover, circles at minimum speed until the user steers. Control never blends back while paused, and the sunset-run clock stops. Resuming hands control straight back to the autopilot (the 2 s blend, without the 3 s wait).
+- Keyboard: W/S speed, A/D steer, Q/E altitude (bird; Q descends), Space pause, T toggles the time slider, 1–9 and 0 jump to beats 1–10 (through a short fade to black), Esc closes a card.
 
 **Landmark cards**: when the camera is within a landmark's trigger radius and it is in frame, a small card slides in with the name and a two-line note. Clicking expands it to an illustration and a short paragraph. Cards never block the view and never pause the tour. One card shows at a time (rules under Landmark triggers).
 
@@ -144,7 +144,9 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `input` | Normalises keyboard, mouse drag and touch into a steering vector and buttons; reports last-input time | DOM events | steer, throttle, climb, pause |
 | `controller` | Blends autopilot and manual targets by a weight that ramps 0 to 1 over 0.5 s on input, and back to 0 over 2 s after 3 s without input; owns the mode state machine and the mode rule on hand-back | autopilot, input | vehicle target, mode |
 | `vehicle` | Integrates position and velocity for bird or boat with per-mode limits; clamps to the corridor and altitude floor, or the river polygon; computes bank and pitch | controller target, river polygon, floor grid | pose |
-| `camera` | Third-person rig behind the vehicle with per-mode offsets, camera beats (1.5 s blends between camera modes), and the landing/take-off blend | vehicle pose, autopilot beats | three.js camera |
+| `camera` | Third-person rig behind the vehicle with per-mode offsets, camera keys (1.5 s blends between camera modes), and the landing/take-off blend | vehicle pose, route camera keys | three.js camera |
+| `cards` | Landmark card triggers: radius, view cone, one at a time, once per pass | vehicle pose, camera, landmarks | current card |
+| `tour` | The loop and the beat jumps, both cut through black | autopilot, keys | fade, reset |
 | `scene` | Loads and places terrain, water, city, heroes, trees, backdrop; owns the water shader | assets | three.js scene graph |
 | `lighting` | Sun and moon directional lights, hemisphere light, sky shader, fog, emissive crossfade, night light groups; every curve keyed to sun elevation | time of day | light state |
 | `hud` | Bottom bar, time slider, mode badge, OSM credit, landmark cards, about overlay | state | DOM |
@@ -155,7 +157,7 @@ The Controller is the only module that knows about both autopilot and the user; 
 
 **Key data files**
 
-- `route.json`: an ordered list of control points `{lat, lon, alt, speed, mode, hold?, beat?, timeOfDay?}`. `mode` applies from that point on; heading comes from the spline. A beat is anchored to the point where it starts (`beat: {id, name}`, with `cameraMode`, `target` and `duration` added in M2), so editing points never invalidates a hand-written arc length; `timeOfDay` keys the sunset-run clock at that point.
+- `route.json`: an ordered list of control points `{lat, lon, alt, speed, mode, hold?, beat?, timeOfDay?, camera?}`. `mode` applies from that point on; heading comes from the spline. A beat is anchored to the point where it starts (`beat: {id, name}`), so editing points never invalidates a hand-written arc length; `camera: {mode, target?}` sets the camera mode from that point to the next camera key (`target` is a landmark id); `timeOfDay` keys the sunset-run clock at that point.
 - `landmarks.json`: `{id, name, position, triggerRadius, model, note, illustration, osm?, placeholder?}`; `osm` lists the OSM buildings the hero replaces, and `placeholder` describes the block that stands in until the hero model arrives.
 - `quality.json`: three tiers (low, medium, high) setting shadow map size, reflection resolution, tree count, bloom on/off.
 - `floor.bin`: the bird's altitude-floor grid, written by `build-floor.ts`. `terrain.bin` and `floor.bin` share one format: a JSON header and typed-array layers, zlib-compressed.
@@ -208,18 +210,18 @@ Reference for Budapest on 1 October (CEST):
 
 **The spline.** `route.json` holds about 65 hand-placed control points in lat/lon with altitude, speed and mode. At load they become a centripetal Catmull-Rom curve in local metres. Autopilot moves a parameter `s` (arc length) at the keyframed speed; everything else (heading, altitude, mode) is interpolated from the nearest control points. The spline is the vehicle's path, not the camera's. Where a beat circles a landmark (the Parliament arc, the Market Hall finish), the spline itself makes the arc.
 
-**Beats.** Ten named beats sit on the spline at arc-length positions; their start times follow from the distances and speeds between them. A beat can set a camera mode for its duration:
+**Beats.** Ten named beats sit on the spline at arc-length positions; their start times follow from the distances and speeds between them. Camera keys on route points (most of them at beat starts) set a camera mode until the next key:
 
 - `follow` (default): camera 12 m behind and 4 m above the bird, 6 m behind and 1.5 m above the boat, smoothed with a critically damped spring (0.4 s).
-- `orbit`: the camera stays on the vehicle's rig but aims at a target point (the Parliament dome) while the spline arcs around it, so the vehicle never leaves the frame.
-- `reveal`: camera lags further behind and higher, then catches up, used for the first climb and the Market Hall finish.
-- `low`: camera drops to just above the vehicle, used under bridges.
+- `orbit`: the camera stays on the vehicle's rig but aims at a target landmark (the Parliament dome, Buda Castle, the Liberty Statue, the Market Hall) while the spline arcs around or past it. The rig swings round the vehicle only as far as it takes to keep the target within 34° of it (at most 75° from straight behind) and aims between the two, so the vehicle never leaves the frame.
+- `reveal`: camera lags further behind and higher, then catches up by the next key, used for the first climb and the Market Hall finish.
+- `low`: camera drops to just above the vehicle, used under bridges. It switches on by itself whenever the vehicle is passing under a deck, in manual flight too.
 
 Changes between camera modes blend over 1.5 s.
 
 Beats never move the vehicle; they only move the camera around it. This keeps manual override simple: the vehicle is always where the user expects.
 
-**Manual override.** Input sets a manual target (steer, throttle, climb) applied to the vehicle directly. The controller's blend weight `w` ramps from 0 to 1 over 0.5 s on first input and holds while input continues; after 3 s without input it ramps back to 0 over 2 s. The vehicle target is `lerp(autopilotTarget, manualTarget, w)`. While `w` > 0, the autopilot parameter `s` is re-derived from the vehicle's nearest point on the spline, searched only within 300 m of arc length around the current `s`: the route passes close to itself over Buda and at the Market Hall, and a global search would snap backwards. When control returns, the autopilot continues from where the user actually is. If the vehicle's mode doesn't match the route's mode at that point, autopilot runs the transition first: it takes off at once if the route says bird, or flies back to the route and lands if the route says boat (boat stretches of the route are always on water). Camera beats are suspended while `w` > 0.5 and resume on the next beat boundary.
+**Manual override.** Input sets a manual target (steer, throttle, climb) applied to the vehicle directly. The controller's blend weight `w` ramps from 0 to 1 over 0.5 s on first input and holds while input continues; after 3 s without input it ramps back to 0 over 2 s. The vehicle target is `lerp(autopilotTarget, manualTarget, w)`. While `w` > 0, the autopilot parameter `s` is re-derived from the vehicle's nearest point on the spline, searched only within 300 m of arc length around the current `s`: the route passes close to itself over Buda and at the Market Hall, and a global search would snap backwards. When control returns, the autopilot continues from where the user actually is. If the vehicle's mode doesn't match the route's mode at that point, autopilot runs the transition first: it takes off at once if the route says bird, or flies back to the route and lands if the route says boat (boat stretches of the route are always on water). Camera keys are suspended while `w` > 0.5 and resume at the next camera key.
 
 **Corridor.** The bird is clamped to 300 m lateral distance from the spline, never closer than 50 m to the edge of the world, and to at most 180 m above the water. The lower limit comes from the floor grid (`floor.bin`, 5 m cells holding the highest of terrain, building tops, tree crowns and bridge towers): over land the bird stays at least 15 m above it (4 m above a tree crown), and over water the floor is the surface. Bridge decks are tested against their outlines, so the bird passes under a bridge if it arrives below the deck and over it otherwise. Pushing against a limit slows and turns the vehicle back (or lifts it, at the floor) rather than stopping it. The boat is clamped inside the river polygon with a 5 m margin, tested by a 2D point-in-polygon check each frame.
 
@@ -235,9 +237,9 @@ Beats never move the vehicle; they only move the camera around it. This keeps ma
 
 **Mesh.** V1 uses one stylized vehicle with two states: a bird (gull-like, low-poly) and a small boat. A simple crossfade behind the splash is enough; a morph is a stretch goal.
 
-**Landmark triggers.** Each landmark has a trigger radius (150 to 400 m). When the vehicle is inside it and the landmark is within 40 degrees of the camera forward vector, the HUD shows its card. One card shows at a time, for 8 s; where radii overlap (Parliament, the Shoes, the Bastion and the Chain Bridge), the landmark nearest the centre of the view wins and the others can show once it has gone, if they still qualify. Each card shows once per pass: it can show again only after the vehicle has left its trigger radius, so a long arc around a landmark does not re-trigger it.
+**Landmark triggers.** Each landmark has a trigger radius (150 to 500 m; the landmarks on the banks need the most, since the boat runs mid-river). When the vehicle is inside it and the landmark is within 40 degrees of the camera forward vector, the HUD shows its card. One card shows at a time, for 8 s; where radii overlap (Parliament, the Shoes, the Bastion and the Chain Bridge), the landmark nearest the centre of the view wins and the others can show once it has gone, if they still qualify. Each card shows once per pass: it can show again only after the vehicle has left its trigger radius, so a long arc around a landmark does not re-trigger it.
 
-**Loop.** At the end of the route, autopilot circles the Market Hall for 5 s, fades to black for 1 s, resets to the Japanese Garden and plays again. In demo mode the time of day also resets.
+**Loop.** At the end of the route, autopilot circles the Market Hall for 5 s, fades to black for 1 s, resets to the Japanese Garden and plays again. In demo mode the time of day also resets. The beat jumps (1–9 and 0) cut through black the same way, with a shorter fade.
 
 ## Performance budget and constraints
 

@@ -1,19 +1,17 @@
 // Danube Flyover: loads the world built by the tools/ pipeline and wires the modules into one
 // frame loop.
-// Order per frame: input → autopilot → controller → vehicle → lighting → camera → HUD → render.
+// Order per frame: input → simulation (autopilot → controller → vehicle → camera → cards →
+// tour) → lighting → meshes → HUD → render.
 
 import "./style.css";
 import { ACESFilmicToneMapping, PCFShadowMap, type PerspectiveCamera, SRGBColorSpace, Scene, WebGLRenderer } from "three";
-import { resetToStart, updateAutopilot } from "./autopilot";
-import { CameraRig } from "./camera";
-import { updateController } from "./controller";
+import { setPaused } from "./controller";
 import { Hud } from "./hud";
 import { Input } from "./input";
 import { Lighting } from "./lighting";
 import { loadWorld } from "./load";
 import { Route, type RouteJson } from "./route";
-import { createState } from "./state";
-import { updateVehicle } from "./vehicle";
+import { createSim, stepSim } from "./sim";
 import { VehicleMesh } from "./vehicleMesh";
 import { buildWorld } from "./world/world";
 
@@ -54,15 +52,20 @@ async function main(): Promise<void> {
   const lighting = new Lighting(scene, world.water);
   const vehicleMesh = new VehicleMesh();
   scene.add(vehicleMesh.group);
-  const rig = new CameraRig();
 
-  const st = createState();
-  resetToStart(st, route);
+  const sim = createSim(route, world);
+  const { st, rig, tour } = sim;
+  // 1–9 and 0 jump to beats 1–10.
+  const digits: Record<string, () => void> = {};
+  for (let n = 1; n <= 10; n++) digits[`Digit${n % 10}`] = digits[`Numpad${n % 10}`] = () => tour.jump(n);
   const input = new Input(canvas, {
+    ...digits,
+    Space: () => setPaused(st, !st.paused),
+    Escape: () => st.cards.id && sim.cards.dismiss(st),
     KeyT: () => (st.ui.sliderVisible = !st.ui.sliderVisible),
     Backquote: () => (st.ui.debug = !st.ui.debug),
   });
-  const hud = new Hud(st, route, world, renderer.info.render);
+  const hud = new Hud(sim, renderer.info.render);
 
   const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -71,30 +74,14 @@ async function main(): Promise<void> {
   window.addEventListener("resize", resize);
   resize();
 
-  // Debug hooks for the console. flyover.jump(n) puts the vehicle at the start of beat n.
-  const jump = (n: number) => {
-    const beat = route.beats.find((b) => b.id === n);
-    if (!beat) return;
-    const p = route.sample(beat.s);
-    const v = st.vehicle;
-    Object.assign(v, { x: p.x, y: p.y, z: p.z, heading: p.heading, speed: p.speed, vSpeed: 0, transitionT: 0 });
-    v.mode = p.mode === "boat" ? "BOAT" : "BIRD";
-    v.boatness = p.mode === "boat" ? 1 : 0;
-    st.autopilot.s = beat.s;
-    st.autopilot.holdLeft = 0;
-    rig.snap();
-  };
+  // Debug hooks for the console. flyover.jump(n) cuts straight to the start of beat n.
+  const jump = (n: number) => tour.jumpNow(st, n);
   // flyover.camera = someCamera renders from it instead of the rig (for overviews); null restores.
   const debug: { camera: PerspectiveCamera | null } = { camera: null };
   const frame = (dt: number, draw = true) => {
-    st.dt = dt;
-    st.t += dt;
     input.update(st);
-    updateAutopilot(st, route, dt);
-    updateController(st, world, dt);
-    updateVehicle(st, world, route, dt);
+    stepSim(sim, dt);
     lighting.update(st, renderer, rig.focus, rig.camera.position, dt);
-    rig.update(st, world, dt);
     world.landmarks?.update(rig.camera.position);
     vehicleMesh.update(st, dt);
     hud.update(st, dt);
@@ -105,7 +92,7 @@ async function main(): Promise<void> {
     const n = Math.max(1, Math.round(seconds * 30));
     for (let i = 0; i < n; i++) frame(1 / 30, i === n - 1);
   };
-  Object.assign(window, { flyover: Object.assign(debug, { st, route, world, rig, scene, renderer, jump, step }) });
+  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, rig, scene, renderer, jump, step }) });
 
   loading.hidden = true;
   let last = performance.now();

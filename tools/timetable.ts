@@ -2,6 +2,7 @@
 // Usage: npm run timetable
 
 import { readFileSync } from "node:fs";
+import { LOOP } from "../src/config";
 import { Route, type RouteJson } from "../src/route";
 
 const json = JSON.parse(
@@ -26,4 +27,9 @@ route.beats.forEach((b, i) => {
     `${String(b.id).padStart(3)}  ${b.name.padEnd(38)} ${mmss(b.time).padStart(5)}  ${mmss(endT).padStart(5)}  ${String(Math.round(endS - b.s)).padStart(5)} m  ${hhmm(route.clockAt(b.time))}`,
   );
 });
-console.log(`\nTotal run: ${mmss(route.totalTime)} (plus the 5 s hold and 1 s fade at the loop)`);
+console.log("\nCamera keys");
+route.shots.forEach((sh) => {
+  const beat = route.beatAt(sh.s);
+  console.log(`  ${mmss(sh.time).padStart(5)}–${mmss(sh.endTime).padStart(5)}  ${(sh.mode + (sh.target ? ` → ${sh.target}` : "")).padEnd(24)} (beat ${beat?.id ?? "-"})`);
+});
+console.log(`\nTotal run: ${mmss(route.totalTime)}, then ${LOOP.circle} s circling the Market Hall and a ${LOOP.fadeOut} s fade before the loop`);

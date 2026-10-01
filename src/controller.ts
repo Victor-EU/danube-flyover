@@ -1,7 +1,9 @@
 // The only module that knows about both the autopilot and the user. It blends their commands
 // by the weight `w` and owns the mode state machine: BIRD → LANDING → BOAT → TAKEOFF → BIRD.
+// Pause hands the vehicle to the user and keeps it there: the boat idles and the bird, which
+// can't hover, circles at minimum speed until the user steers.
 
-import { BIRD, BOAT, CONTROL, TRANSITION } from "./config";
+import { BIRD, BOAT, CONTROL, PAUSE, TRANSITION } from "./config";
 import { forwardOf } from "./geo";
 import type { Mode, State } from "./state";
 import type { World } from "./world/world";
@@ -15,10 +17,11 @@ export function updateController(st: State, world: World, dt: number): void {
   const ap = st.autopilot;
 
   // Blend weight: 0.5 s to the user on input; back to autopilot over 2 s after 3 s idle.
-  if (inp.active) {
-    c.idleFor = 0;
+  // Never back while paused.
+  if (inp.active || st.paused) {
+    if (inp.active) c.idleFor = 0;
     c.w = Math.min(1, c.w + dt / CONTROL.blendIn);
-    ap.holdLeft = 0; // steering cancels the opening hover
+    ap.holdLeft = 0; // steering (or pausing) cancels the opening hover
   } else {
     c.idleFor += dt;
     if (c.idleFor > CONTROL.idleBeforeReturn) c.w = Math.max(0, c.w - dt / CONTROL.blendOut);
@@ -28,15 +31,21 @@ export function updateController(st: State, world: World, dt: number): void {
   const boat = v.mode === "BOAT";
   const maxYaw = boat ? BOAT.maxYawRate : BIRD.maxYawRate;
   // Inputs are ignored during a transition.
-  const mYaw = transitioning ? 0 : inp.steer * maxYaw;
-  const mAccel = transitioning ? 0 : inp.throttle * (boat ? BOAT.accel : BIRD.accel);
+  let mYaw = transitioning ? 0 : inp.steer * maxYaw;
+  let mAccel = transitioning ? 0 : inp.throttle * (boat ? BOAT.accel : BIRD.accel);
   const mClimb = transitioning || boat ? 0 : inp.climb * (inp.climb < 0 ? BIRD.maxDive : BIRD.maxClimb);
+  if (st.paused && !transitioning) {
+    // Idle without input: slow to the minimum (a stop, for the boat); the bird keeps
+    // circling the way it was already turning.
+    if (inp.throttle === 0) mAccel = -(boat ? BOAT.accel : BIRD.accel);
+    if (inp.steer === 0 && !boat) mYaw = (Math.sign(v.yawRate) || 1) * Math.min(maxYaw, v.speed / PAUSE.birdRadius);
+  }
   const a = ap.command;
   c.command.yawRate = lerp(a.yawRate, mYaw, c.w);
   c.command.accel = lerp(a.accel, mAccel, c.w);
   c.command.climb = lerp(a.climb, mClimb, c.w);
 
-  const autopilotDriving = c.w < 0.5 && ap.holdLeft <= 0;
+  const autopilotDriving = c.w < 0.5 && ap.holdLeft <= 0 && !st.paused;
   switch (v.mode) {
     case "BIRD": {
       const overWater = world.river.isWater(v.x, v.z);
@@ -65,6 +74,13 @@ export function updateController(st: State, world: World, dt: number): void {
       if (v.transitionT >= TRANSITION.takeoff) setMode(st, "BIRD");
       break;
   }
+}
+
+/** Space and the bar button. Resuming hands control back at once (no 3 s wait). */
+export function setPaused(st: State, paused: boolean): void {
+  if (st.paused === paused) return;
+  st.paused = paused;
+  if (!paused) st.control.idleFor = CONTROL.idleBeforeReturn;
 }
 
 function start(st: State, mode: Mode): void {

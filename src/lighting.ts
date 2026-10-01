@@ -111,8 +111,11 @@ export class Lighting {
 
     this.sun.intensity = curve(SUN_INTENSITY, e);
     // With the sun down the shadow map is unused: stop re-rendering it (toggling castShadow
-    // instead would recompile every material).
+    // instead would recompile every material). It must still be rendered once, or the shadowed
+    // materials sample a depth texture that doesn't exist and every draw fails (a first frame at
+    // night, e.g. a jump straight to a night beat).
     renderer.shadowMap.autoUpdate = this.sun.intensity > 0;
+    if (this.sun.shadow.map === null) renderer.shadowMap.needsUpdate = true;
     colorCurve(SUN_COLOR, e, this.sun.color);
     this.placeShadow(focus);
 

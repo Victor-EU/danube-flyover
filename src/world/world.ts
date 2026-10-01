@@ -8,7 +8,7 @@ import { worldBounds, type Bounds } from "./bounds";
 import { Bridges, type BridgesJson } from "./bridges";
 import { Floor } from "./floor";
 import { decodeGrid } from "./gridFile";
-import { Landmarks, type LandmarksJson } from "./landmarks";
+import { buildSights, Landmarks, type LandmarksJson, type Sight } from "./landmarks";
 import { River, type RiverJson } from "./river";
 import { Terrain } from "./terrain";
 import { buildTrees, type TreesJson } from "./trees";
@@ -36,6 +36,8 @@ export interface World {
   bridges: Bridges;
   /** Placeholder blocks and labels (browser only). */
   landmarks: Landmarks | null;
+  /** Every landmark's position and aim point, for the cards and the orbit camera. */
+  sights: Sight[];
   /** The shared water material; lighting tints it toward the horizon colour (M3 adds reflections). */
   water: MeshStandardMaterial;
   group: Group;
@@ -56,6 +58,7 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
   const terrain = time("terrain", () => new Terrain(decodeGrid(files.terrain)));
   const floor = time("floor", () => new Floor(decodeGrid(files.floor)));
   const bridges = time("bridges", () => new Bridges(files.bridges, river, terrain, !!models));
+  const sights = buildSights(files.landmarks, (x, z) => terrain.heightAt(x, z));
   const water = new MeshStandardMaterial({ color: "#3b7680", roughness: 0.55, metalness: 0 });
   const group = new Group();
   let landmarks: Landmarks | null = null;
@@ -86,7 +89,7 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
     group.add(time("trees", () => buildTrees(files.trees, terrain)));
     group.add(bridges.group);
   }
-  return { bounds, river, terrain, floor, bridges, landmarks, water, group, timings };
+  return { bounds, river, terrain, floor, bridges, landmarks, sights, water, group, timings };
 }
 
 /**

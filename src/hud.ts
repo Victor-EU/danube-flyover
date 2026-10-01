@@ -1,10 +1,11 @@
-// The thin bottom bar (time slider, mode and pilot badges, sunset-run toggle, the OSM credit
-// that opens the About overlay), the fading "take control" hint, and a debug panel toggled
-// with the ` key.
+// The thin bottom bar (play/pause, mode and pilot badges, time slider, sunset-run toggle, the
+// OSM credit that opens the About overlay), the landmark card, the fade to black, the fading
+// "take control" hint, and a debug panel toggled with the ` key.
 
-import type { Route } from "./route";
+import { CARDS } from "./config";
+import { setPaused } from "./controller";
+import type { Sim } from "./sim";
 import type { State } from "./state";
-import type { World } from "./world/world";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -19,22 +20,30 @@ export class Hud {
   private readonly slider = $<HTMLInputElement>("slider");
   private readonly clock = $<HTMLSpanElement>("clock");
   private readonly sunset = $<HTMLInputElement>("sunset");
+  private readonly play = $<HTMLButtonElement>("play");
   private readonly mode = $<HTMLSpanElement>("mode");
   private readonly pilot = $<HTMLSpanElement>("pilot");
   private readonly hint = $<HTMLDivElement>("hint");
   private readonly debug = $<HTMLPreElement>("debug");
   private readonly time = $<HTMLLabelElement>("time");
+  private readonly fade = $<HTMLDivElement>("fade");
+  private readonly card = $<HTMLElement>("card");
+  private readonly cardOpen = $<HTMLButtonElement>("card-open");
+  private readonly cardMore = $<HTMLDivElement>("card-more");
+  private readonly cardTimer = $<HTMLDivElement>("card-timer");
+  private cardId: string | null = null;
+  private cardExpanded = false;
+  private paused: boolean | null = null;
   private frames = 0;
   private fpsT = 0;
   private fps = 0;
 
   constructor(
-    st: State,
-    private readonly route: Route,
-    private readonly world: World,
+    private readonly sim: Sim,
     /** The renderer's per-frame counters (renderer.info.render). */
     private readonly renderInfo: { calls: number; triangles: number },
   ) {
+    const st = sim.st;
     this.slider.value = String(st.timeOfDay);
     this.sunset.checked = st.sunsetRun.enabled;
     this.slider.addEventListener("input", () => {
@@ -43,14 +52,24 @@ export class Hud {
       st.sunsetRun.pausedUntil = st.t + 10;
     });
     this.sunset.addEventListener("change", () => (st.sunsetRun.enabled = this.sunset.checked));
+    this.play.addEventListener("click", () => setPaused(st, !st.paused));
     const about = $<HTMLDialogElement>("about");
     $<HTMLButtonElement>("credit").addEventListener("click", () => about.showModal());
+    // Clicking the card opens it to the illustration and paragraph; an open card stays until closed.
+    this.cardOpen.addEventListener("click", () => {
+      if (st.cards.id) st.cards.expanded = !st.cards.expanded;
+    });
+    $<HTMLButtonElement>("card-close").addEventListener("click", () => sim.cards.dismiss(st));
+    // The hint sits just above the bar, however many lines the bar wraps to.
+    const bar = $<HTMLDivElement>("bar");
+    new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", `${bar.offsetHeight}px`)).observe(bar);
   }
 
   update(st: State, dt: number): void {
     if (document.activeElement !== this.slider) this.slider.value = String(st.timeOfDay);
     this.clock.textContent = formatClock(st.timeOfDay);
     this.time.hidden = !st.ui.sliderVisible;
+    this.fade.style.opacity = String(st.ui.fade);
 
     const v = st.vehicle;
     // The badge switches halfway through a transition (1.0 s into landing, 1.25 s into take-off).
@@ -60,9 +79,17 @@ export class Hud {
     this.mode.textContent = label;
     this.mode.dataset.mode = label.toLowerCase();
     const w = st.control.w;
-    this.pilot.textContent = w >= 0.99 ? "You" : w <= 0.01 ? "Autopilot" : w > 0.5 ? "You…" : "Autopilot…";
+    this.pilot.textContent = st.paused ? "Paused" : w >= 0.99 ? "You" : w <= 0.01 ? "Autopilot" : w > 0.5 ? "You…" : "Autopilot…";
     this.pilot.dataset.manual = String(w > 0.5);
+    this.pilot.dataset.paused = String(st.paused);
+    if (st.paused !== this.paused) {
+      this.paused = st.paused;
+      this.play.dataset.paused = String(st.paused);
+      this.play.setAttribute("aria-label", st.paused ? "Resume the tour" : "Pause the tour");
+      this.play.title = st.paused ? "Resume (Space)" : "Pause (Space)";
+    }
     this.hint.classList.toggle("gone", st.input.everUsed);
+    this.updateCard(st);
 
     this.frames++;
     this.fpsT += dt;
@@ -72,24 +99,56 @@ export class Hud {
       this.fpsT = 0;
     }
     this.debug.hidden = !st.ui.debug;
-    if (st.ui.debug) {
-      const ap = st.autopilot;
-      const r = this.route;
-      this.debug.textContent = [
-        `fps        ${this.fps}`,
-        `mode       ${v.mode}${v.mode === "LANDING" || v.mode === "TAKEOFF" ? ` ${v.transitionT.toFixed(2)} s` : ""}`,
-        `control w  ${w.toFixed(2)}  (idle ${st.control.idleFor.toFixed(1)} s)`,
-        `speed      ${v.speed.toFixed(1)} m/s`,
-        `altitude   ${v.y.toFixed(1)} m   floor ${this.world.floor.birdMin(v.x, v.z).toFixed(1)} m`,
-        `lateral    ${v.lateral.toFixed(0)} m from route`,
-        `route      ${(ap.s / 1000).toFixed(2)} / ${(r.length / 1000).toFixed(2)} km  (${ap.routeMode})`,
-        `beat       ${ap.beat}`,
-        `route time ${formatMinutes(ap.routeTime)} / ${formatMinutes(r.totalTime)}`,
-        `sun        ${st.sun.elevation.toFixed(1)}°  az ${st.sun.azimuth.toFixed(0)}°`,
-        `draw       ${this.renderInfo.calls} calls, ${(this.renderInfo.triangles / 1e6).toFixed(2)} M triangles (all passes)`,
-        `build ms   ${Object.entries(this.world.timings).map(([k, ms]) => `${k} ${ms}`).join(", ")}`,
-      ].join("\n");
+    if (st.ui.debug) this.debug.textContent = this.debugText(st);
+  }
+
+  private updateCard(st: State): void {
+    const c = st.cards;
+    if (c.id !== this.cardId) {
+      this.cardId = c.id;
+      const sight = c.id ? this.sim.cards.sight(c.id) : undefined;
+      // Leaving: keep the old text while it slides out.
+      if (sight) {
+        $("card-name").textContent = sight.name;
+        $("card-note").textContent = sight.note;
+        // Placeholder until M4's illustrations and longer text: the note stands in for the paragraph.
+        $("card-text").textContent = sight.note;
+        $("card-art").setAttribute("aria-label", `Illustration of ${sight.name} (to come)`);
+      }
+      this.card.classList.toggle("in", !!sight);
+      this.cardExpanded = !c.expanded; // force the expanded state to refresh below
     }
+    if (c.expanded !== this.cardExpanded) {
+      this.cardExpanded = c.expanded;
+      this.card.classList.toggle("expanded", c.expanded);
+      this.cardMore.hidden = !c.expanded;
+      this.cardOpen.setAttribute("aria-expanded", String(c.expanded));
+    }
+    if (c.id) this.cardTimer.style.transform = `scaleX(${Math.max(0, 1 - c.age / CARDS.show)})`;
+  }
+
+  private debugText(st: State): string {
+    const v = st.vehicle;
+    const ap = st.autopilot;
+    const r = this.sim.route;
+    const cam = st.camera;
+    const world = this.sim.world;
+    return [
+      `fps        ${this.fps}`,
+      `mode       ${v.mode}${v.mode === "LANDING" || v.mode === "TAKEOFF" ? ` ${v.transitionT.toFixed(2)} s` : ""}${st.paused ? "  (paused)" : ""}`,
+      `control w  ${st.control.w.toFixed(2)}  (idle ${st.control.idleFor.toFixed(1)} s)`,
+      `speed      ${v.speed.toFixed(1)} m/s`,
+      `altitude   ${v.y.toFixed(1)} m   floor ${world.floor.birdMin(v.x, v.z).toFixed(1)} m`,
+      `lateral    ${v.lateral.toFixed(0)} m from route`,
+      `route      ${(ap.s / 1000).toFixed(2)} / ${(r.length / 1000).toFixed(2)} km  (${ap.routeMode})${ap.phase === "end" ? `  end circle ${ap.endT.toFixed(1)} s` : ""}`,
+      `beat       ${ap.beat}`,
+      `route time ${formatMinutes(ap.routeTime)} / ${formatMinutes(r.totalTime)}`,
+      `camera     ${cam.mode}${cam.target ? ` → ${cam.target}` : ""}  key ${cam.key}${cam.blend < 1 ? `  blend ${cam.blend.toFixed(2)}` : ""}${cam.suspended ? "  (suspended)" : ""}`,
+      `card       ${st.cards.id ? `${st.cards.id} ${st.cards.age.toFixed(1)} s${st.cards.expanded ? " (open)" : ""}` : "-"}`,
+      `sun        ${st.sun.elevation.toFixed(1)}°  az ${st.sun.azimuth.toFixed(0)}°`,
+      `draw       ${this.renderInfo.calls} calls, ${(this.renderInfo.triangles / 1e6).toFixed(2)} M triangles (all passes)`,
+      `build ms   ${Object.entries(world.timings).map(([k, ms]) => `${k} ${ms}`).join(", ")}`,
+    ].join("\n");
   }
 }
 

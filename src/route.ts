@@ -1,9 +1,11 @@
 // Loads route.json and exposes the autopilot spline as an arc-length table:
-// position, heading, speed, mode, route time and the sunset-run clock at any `s`.
+// position, heading, speed, mode, route time and the sunset-run clock at any `s`, plus the
+// beats, the camera keys and the circle the route ends on.
 // No DOM here, so tools/timetable.ts can use it from Node.
 
 import { CatmullRomCurve3, Vector3 } from "three";
 import { headingOf, lonLatToLocal, wrapAngle } from "./geo";
+import type { CameraMode } from "./state";
 
 export type RouteMode = "bird" | "boat";
 
@@ -22,6 +24,11 @@ export interface RoutePointJson {
   beat?: { id: number; name: string };
   /** Sunset-run clock (hours) when the autopilot reaches this point. */
   timeOfDay?: number;
+  /**
+   * Camera mode from this point to the next camera key. `target` is a landmark id (orbit).
+   * `low` also switches on by itself under bridge decks.
+   */
+  camera?: { mode: CameraMode; target?: string };
 }
 
 export interface RouteJson {
@@ -36,6 +43,27 @@ export interface Beat {
   s: number;
   /** Seconds from the start of the run, holds included. */
   time: number;
+}
+
+/** A camera key: a mode that holds from its point until the next key. */
+export interface Shot {
+  mode: CameraMode;
+  target?: string;
+  s: number;
+  /** Route time at the key, and at the next key (or the end of the route). */
+  time: number;
+  endTime: number;
+}
+
+/** The circle the route ends on, which the autopilot keeps flying until the loop. */
+export interface EndCircle {
+  x: number;
+  z: number;
+  r: number;
+  /** +1 if the route turns toward increasing atan2(z, x) (anticlockwise on a north-up map). */
+  dir: 1 | -1;
+  y: number;
+  speed: number;
 }
 
 export interface RouteSample {
@@ -53,6 +81,8 @@ const SUBDIVISIONS = 48;
 export class Route {
   readonly length: number;
   readonly beats: Beat[];
+  readonly shots: Shot[];
+  readonly end: EndCircle | null;
   readonly startHold: number;
   readonly totalTime: number;
   readonly points: readonly RoutePointJson[];
@@ -147,11 +177,16 @@ export class Route {
     this.totalTime = this.time[n - 1];
 
     this.beats = [];
+    this.shots = [];
     this.clockKeys = [];
     pts.forEach((p, j) => {
-      if (p.beat) this.beats.push({ ...p.beat, s: pointS[j], time: this.timeAt(pointS[j]) });
-      if (p.timeOfDay !== undefined) this.clockKeys.push({ time: this.timeAt(pointS[j]), tod: p.timeOfDay });
+      const time = this.timeAt(pointS[j]);
+      if (p.beat) this.beats.push({ ...p.beat, s: pointS[j], time });
+      if (p.timeOfDay !== undefined) this.clockKeys.push({ time, tod: p.timeOfDay });
+      if (p.camera) this.shots.push({ mode: p.camera.mode, target: p.camera.target, s: pointS[j], time, endTime: this.totalTime });
     });
+    for (let i = 0; i < this.shots.length - 1; i++) this.shots[i].endTime = this.shots[i + 1].time;
+    this.end = endCircle(ctrl, pts[pts.length - 1]);
   }
 
   private index(s: number): [number, number] {
@@ -240,4 +275,28 @@ export class Route {
     for (const b of this.beats) if (b.s <= s + 1e-6) found = b;
     return found;
   }
+
+  /** Index of the camera key in force at `s`, or -1 before the first one. */
+  shotIndexAt(s: number): number {
+    let found = -1;
+    for (let i = 0; i < this.shots.length; i++) if (this.shots[i].s <= s + 1e-6) found = i;
+    return found;
+  }
+}
+
+/** The circle through the last three control points, if they turn (not a straight finish). */
+function endCircle(ctrl: Vector3[], last: RoutePointJson): EndCircle | null {
+  if (ctrl.length < 3) return null;
+  const [a, b, c] = ctrl.slice(-3);
+  const d = 2 * (a.x * (b.z - c.z) + b.x * (c.z - a.z) + c.x * (a.z - b.z));
+  if (Math.abs(d) < 1e-6) return null;
+  const a2 = a.x * a.x + a.z * a.z;
+  const b2 = b.x * b.x + b.z * b.z;
+  const c2 = c.x * c.x + c.z * c.z;
+  const x = (a2 * (b.z - c.z) + b2 * (c.z - a.z) + c2 * (a.z - b.z)) / d;
+  const z = (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d;
+  const r = Math.hypot(a.x - x, a.z - z);
+  if (r > 1000) return null;
+  const cross = (b.x - a.x) * (c.z - b.z) - (b.z - a.z) * (c.x - b.x);
+  return { x, z, r, dir: cross > 0 ? 1 : -1, y: last.alt, speed: last.speed };
 }

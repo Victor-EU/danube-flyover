@@ -10,9 +10,25 @@
     <canvas id="view" aria-label="Danube Flyover 3D view"></canvas>
     <div id="loading">Building Budapest…</div>
     <div id="fatal" hidden></div>
-    <div id="hint">Steer to take control: W/S speed · A/D turn · Q/E down/up · or drag</div>
+    <div id="fade"></div>
+    <div id="hint">Steer to take control: W/S speed · A/D turn · Q/E down/up · or drag<br />Space pauses · 1–9 and 0 jump to a stop on the tour</div>
     <pre id="debug" hidden></pre>
+    <aside id="card" aria-live="polite" aria-label="Landmark">
+      <button id="card-open" type="button" aria-expanded="false" aria-controls="card-more">
+        <span id="card-name"></span>
+        <span id="card-note"></span>
+      </button>
+      <div id="card-more" hidden>
+        <div id="card-art" role="img"><span>Illustration to come</span></div>
+        <p id="card-text"></p>
+      </div>
+      <button id="card-close" type="button" aria-label="Close card">×</button>
+      <div id="card-timer"></div>
+    </aside>
     <div id="bar">
+      <button id="play" type="button" aria-label="Pause the tour" title="Pause (Space)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect class="pause" x="3.5" y="3" width="3" height="10" rx="0.8" /><rect class="pause" x="9.5" y="3" width="3" height="10" rx="0.8" /><path class="resume" d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z" /></svg>
+      </button>
       <span id="mode" class="badge" data-mode="bird">Bird</span>
       <span id="pilot" class="badge">Autopilot</span>
       <label id="time" title="Time of day (T to hide)">
@@ -25,6 +41,13 @@
     <dialog id="about" aria-labelledby="about-title">
       <h2 id="about-title">About Danube Flyover</h2>
       <p>A flight along the Budapest riverfront, from the Japanese Garden on Margaret Island to the Central Market Hall.</p>
+      <h3>Controls</h3>
+      <ul>
+        <li>The autopilot flies the tour. Steer to take over: W/S speed, A/D turn, Q/E down and up (as the bird), or drag. After 3 s without input, the autopilot takes back over.</li>
+        <li>Land: hold Q over the water. Take off: hold W at the boat's top speed.</li>
+        <li>Space pauses the tour and leaves you in control. 1–9 and 0 jump to the ten stops. T hides the time slider.</li>
+        <li>Landmark cards: click one to open it, Esc to close it.</li>
+      </ul>
       <h3>Data</h3>
       <ul>
         <li>Buildings, the river, bridges, parks and trees: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>, available under the Open Database Licence (ODbL).</li>

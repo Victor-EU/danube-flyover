@@ -36,11 +36,14 @@ export function updateVehicle(st: State, world: World, route: Route, dt: number)
       v.speed = clamp(v.speed + cmd.accel * dt, BIRD.minSpeed, BIRD.maxSpeed);
       v.y += cmd.climb * dt;
       break;
-    case "BOAT":
+    case "BOAT": {
       v.yawRate = cmd.yawRate;
-      v.speed = clamp(v.speed + cmd.accel * dt, BOAT.minSpeed, BOAT.maxSpeed);
+      // Paused, the boat idles down to a stop; afterwards it eases back up to its minimum.
+      const min = st.paused ? 0 : Math.min(BOAT.minSpeed, v.speed + BOAT.accel * dt);
+      v.speed = clamp(v.speed + cmd.accel * dt, min, BOAT.maxSpeed);
       v.y = 0;
       break;
+    }
     case "LANDING": {
       // 2.0 s: speed eases to boat cruise, altitude to the water, pitch to level.
       const e = smoothstep(0, 1, v.transitionT / TRANSITION.landing);

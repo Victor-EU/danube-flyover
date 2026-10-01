@@ -1,5 +1,6 @@
-// Landmarks from public/data/landmarks.json (hand-edited): card data for M2 and, until M4's hero
-// models, a placeholder block per landmark at its real position with a floating name label.
+// Landmarks from public/data/landmarks.json (hand-edited): the sights the cards and the orbit
+// camera aim at and, until M4's hero models, a placeholder block per landmark at its real
+// position with a floating name label.
 // The same placement code serves the runtime meshes and the tools/ pipeline (which keeps the
 // filler city out of the blocks and puts them in the floor grid), so the two always agree.
 
@@ -93,6 +94,33 @@ export function placeParts(l: LandmarkJson, groundAt: (x: number, z: number) => 
     const y0 = base + (part.y ?? 0);
     const round = part.shape !== "box";
     return { part, x, z, y0, top: y0 + part.h, rot, hw: round ? part.r! : part.w! / 2, hd: round ? part.r! : part.d! / 2 };
+  });
+}
+
+/** A landmark as the cards and the camera see it: where it is and the point to aim at. */
+export interface Sight {
+  id: string;
+  name: string;
+  note: string;
+  illustration: string | null;
+  x: number;
+  z: number;
+  /** Height of the aim point: half way up the placeholder, or deck height for a bridge. */
+  y: number;
+  radius: number;
+}
+
+/** No DOM or meshes, so tools/simulate.ts can run the cards and the camera too. */
+export function buildSights(data: LandmarksJson, groundAt: (x: number, z: number) => number): Sight[] {
+  return data.landmarks.map((l) => {
+    const c = lonLatToLocal(l.position.lon, l.position.lat);
+    const parts = placeParts(l, groundAt);
+    let y: number;
+    if (parts.length) {
+      const base = Math.min(...parts.map((p) => p.y0));
+      y = base + (Math.max(...parts.map((p) => p.top)) - base) / 2;
+    } else y = Math.max(groundAt(c.x, c.z), 0) + 8;
+    return { id: l.id, name: l.name, note: l.note, illustration: l.illustration, x: c.x, z: c.z, y, radius: l.triggerRadius };
   });
 }
 

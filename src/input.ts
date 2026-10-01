@@ -1,5 +1,6 @@
 // Keyboard, mouse drag and touch drag, normalised into steer / throttle / climb in [-1, 1].
-// W/S speed, A/D steer, Q/E altitude (Q descends). Arrow keys mirror W/A/S/D.
+// W/S speed, A/D steer, Q/E altitude (Q descends). Arrow keys mirror W/A/S/D. One-shot keys
+// (Space, digits, T, Esc, `) go to the hotkey table; Space is always pause, never a button press.
 
 import type { State } from "./state";
 
@@ -15,8 +16,10 @@ export class Input {
       if (document.querySelector("dialog[open]")) return; // the About overlay has the keyboard
       const inField = e.target instanceof HTMLInputElement;
       if (inField && e.code.startsWith("Arrow")) return; // let the slider have its arrows
-      if (hotkeys[e.code] && !e.repeat) {
-        hotkeys[e.code]();
+      if (e.metaKey || e.ctrlKey || e.altKey) return; // browser shortcuts
+      if (hotkeys[e.code]) {
+        e.preventDefault();
+        if (!e.repeat) hotkeys[e.code]();
         return;
       }
       if (GAME_KEYS.has(e.code)) {
@@ -24,7 +27,11 @@ export class Input {
         e.preventDefault();
       }
     });
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keyup", (e) => {
+      this.keys.delete(e.code);
+      // A focused button would otherwise click on Space's keyup.
+      if (e.code === "Space" && !document.querySelector("dialog[open]")) e.preventDefault();
+    });
     window.addEventListener("blur", () => {
       this.keys.clear();
       this.drag = null;

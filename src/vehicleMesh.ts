@@ -86,8 +86,13 @@ export class VehicleMesh {
     deck.position.set(0, 0.67, 0.9);
     const cabin = new Mesh(new BoxGeometry(1.2, 0.7, 1.3), hullMat);
     cabin.position.set(0, 1.0, 0.5);
-    this.boat.add(hull, band, deck, cabin, this.boatLight);
+    this.boat.add(hull, band, deck, cabin);
+    // The lamp hangs off the always-visible group, not the boat, and casts no shadow: a light
+    // inside a hidden group drops out of three's light list, so a change in the light count
+    // recompiled every material at each landing, and the shadow it had picked up from the
+    // castShadow loop below was never rendered at night (black frames on the boat).
     this.boatLight.position.set(0, 2.2, 0.4);
+    this.group.add(this.boatLight);
 
     for (const m of [...this.bird.children, ...this.boat.children]) {
       m.castShadow = true;
