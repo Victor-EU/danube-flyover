@@ -2,12 +2,14 @@
 // layer (river, terrain, floor, bridges) is built in Node too, for tools/simulate.ts; the
 // scene graph (glTF city and water, landmark blocks, trees, backdrop) only in the browser.
 
-import { BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshStandardMaterial, PlaneGeometry, type Object3D } from "three";
+import { BufferAttribute, BufferGeometry, Color, Group, type InstancedMesh, Mesh, MeshStandardMaterial, PlaneGeometry, type Object3D } from "three";
 import { WORLD } from "../config";
+import type { LifeJson } from "../effects";
 import type { TextureSet } from "../textures";
 import { worldBounds, type Bounds } from "./bounds";
 import { Bridges, type BridgesJson } from "./bridges";
 import { Floor } from "./floor";
+import { Heroes } from "./heroes";
 import { decodeGrid } from "./gridFile";
 import { buildSights, Landmarks, type LandmarksJson, type Sight } from "./landmarks";
 import { River, type RiverJson } from "./river";
@@ -23,12 +25,15 @@ export interface WorldFiles {
   trees: TreesJson;
   terrain: ArrayBuffer | Uint8Array;
   floor: ArrayBuffer | Uint8Array;
+  /** The trams' lines (browser only). */
+  life?: LifeJson;
 }
 
-/** The glTF scenes from city.glb and water.glb and the texture set, already loaded (browser only). */
+/** The glTF scenes (city, water, heroes by landmark id) and the texture set, loaded (browser only). */
 export interface WorldModels {
   city: Object3D;
   water: Object3D;
+  heroes: Record<string, Object3D>;
   textures: TextureSet;
 }
 
@@ -38,8 +43,12 @@ export interface World {
   terrain: Terrain;
   floor: Floor;
   bridges: Bridges;
-  /** Placeholder blocks and labels (browser only). */
+  /** Labels, and placeholder blocks for any landmark still without a model (browser only). */
   landmarks: Landmarks | null;
+  /** The hero landmarks' models (browser only). */
+  heroes: Heroes | null;
+  /** The instanced trees (browser only); the quality tiers draw a share of them. */
+  trees: InstancedMesh | null;
   /** Every landmark's position and aim point, for the cards and the orbit camera. */
   sights: Sight[];
   /** The river's material (water.ts makes it reflect), and the ponds' (no planar reflection). */
@@ -62,12 +71,16 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
   const river = time("river", () => new River(files.river));
   const terrain = time("terrain", () => new Terrain(decodeGrid(files.terrain)));
   const floor = time("floor", () => new Floor(decodeGrid(files.floor)));
-  const bridges = time("bridges", () => new Bridges(files.bridges, river, terrain, !!models));
+  // Bridges with a hero model aren't built here (the landmark's name is the bridge's).
+  const heroBridges = new Set(files.landmarks.landmarks.filter((l) => l.model && models?.heroes[l.id]).map((l) => l.name));
+  const bridges = time("bridges", () => new Bridges(files.bridges, river, terrain, !!models, heroBridges));
   const sights = buildSights(files.landmarks, (x, z) => terrain.heightAt(x, z));
   const water = new MeshStandardMaterial({ color: "#3b7680", roughness: 0.55, metalness: 0, name: "river" });
   const pond = new MeshStandardMaterial({ color: "#3b7680", roughness: 0.55, metalness: 0, name: "pond" });
   const group = new Group();
   let landmarks: Landmarks | null = null;
+  let heroes: Heroes | null = null;
+  let trees: InstancedMesh | null = null;
 
   if (models) {
     group.add(time("terrainMesh", () => terrain.buildMesh()));
@@ -98,14 +111,16 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
         });
       group.add(models.city, models.water);
     });
-    landmarks = time("landmarks", () => new Landmarks(files.landmarks, (x, z) => terrain.heightAt(x, z)));
+    landmarks = time("landmarks", () => new Landmarks(files.landmarks, (x, z) => terrain.heightAt(x, z), new Set(Object.keys(models.heroes))));
     group.add(landmarks.group);
-    const trees = time("trees", () => buildTrees(files.trees, terrain));
+    heroes = time("heroes", () => new Heroes(models.heroes, models.textures, Object.fromEntries(files.landmarks.landmarks.map((l) => [l.id, l.name]))));
+    group.add(heroes.group);
+    trees = time("trees", () => buildTrees(files.trees, terrain));
     trees.layers.set(LAYER.trees);
     group.add(trees);
     group.add(bridges.group);
   }
-  return { bounds, river, terrain, floor, bridges, landmarks, sights, water, pond, group, timings };
+  return { bounds, river, terrain, floor, bridges, landmarks, heroes, trees, sights, water, pond, group, timings };
 }
 
 /**

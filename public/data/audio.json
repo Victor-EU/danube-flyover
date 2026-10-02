@@ -1,0 +1,52 @@
+{
+  "tracks": [
+    {
+      "file": "bossa-antigua.m4a",
+      "original": "Bossa Antigua.mp3",
+      "title": "Bossa Antigua",
+      "artist": "Kevin MacLeod (incompetech.com)",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700069",
+      "light": "day",
+      "gain": 1.279,
+      "seconds": 280.8
+    },
+    {
+      "file": "smooth-lovin.m4a",
+      "original": "Smooth Lovin.mp3",
+      "title": "Smooth Lovin",
+      "artist": "Kevin MacLeod (incompetech.com)",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700077",
+      "light": "night",
+      "gain": 1.77,
+      "seconds": 256.2
+    },
+    {
+      "file": "backbay-lounge.m4a",
+      "original": "Backbay Lounge.mp3",
+      "title": "Backbay Lounge",
+      "artist": "Kevin MacLeod (incompetech.com)",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700068",
+      "light": "day",
+      "gain": 1.21,
+      "seconds": 266.1
+    },
+    {
+      "file": "night-in-venice.m4a",
+      "original": "Night in Venice.mp3",
+      "title": "Night in Venice",
+      "artist": "Kevin MacLeod (incompetech.com)",
+      "licence": "CC BY 4.0",
+      "licenceUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1900056",
+      "light": "night",
+      "gain": 0.4,
+      "seconds": 216
+    }
+  ]
+}

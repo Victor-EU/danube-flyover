@@ -21,10 +21,7 @@ export class Post {
     scene: Scene,
     camera: Camera,
   ) {
-    // A multisampled half-float target is 8 bytes a sample: on a high-density screen, which
-    // already has the pixels to smooth edges, two samples instead of four halves its cost.
-    const samples = renderer.getPixelRatio() >= 1.5 ? Math.min(2, QUALITY.samples) : QUALITY.samples;
-    this.target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples });
+    this.target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: this.samplesFor(QUALITY.samples) });
     this.composer = new EffectComposer(renderer, this.target);
     this.render = new RenderPass(scene, camera);
     this.bloom = new UnrealBloomPass(new Vector2(1, 1), 0.6, 0.5, 0.9);
@@ -32,6 +29,24 @@ export class Post {
     this.composer.addPass(this.render);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+  }
+
+  /**
+   * A multisampled half-float target is 8 bytes a sample: on a high-density screen, which
+   * already has the pixels to smooth edges, two samples instead of four halve its cost.
+   */
+  private samplesFor(n: number): number {
+    return this.renderer.getPixelRatio() >= 1.5 ? Math.min(2, n) : n;
+  }
+
+  /** MSAA samples of the scene target (and the composer's second buffer). */
+  setSamples(n: number): void {
+    const samples = this.samplesFor(n);
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (rt.samples === samples) continue;
+      rt.samples = samples;
+      rt.dispose();
+    }
   }
 
   setCamera(camera: Camera): void {

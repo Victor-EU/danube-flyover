@@ -1,9 +1,11 @@
 // Fetches the world files from data/ in parallel, reporting progress by bytes, parses the
-// two glTF files (meshopt-compressed, so the decoder comes along) and decodes the textures.
+// glTF files (the city, the water, and a hero per landmark that has a model; meshopt-
+// compressed, so the decoder comes along) and decodes the textures.
 
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { loadTextures, type TexturesJson } from "./textures";
+import type { LandmarksJson } from "./world/landmarks";
 import type { WorldFiles, WorldModels } from "./world/world";
 
 const FILES = {
@@ -15,6 +17,7 @@ const FILES = {
   floor: "floor.bin",
   city: "city.glb",
   water: "water.glb",
+  life: "life.json",
 } as const;
 
 /** Rough sizes so progress moves sensibly before every Content-Length is known. */
@@ -70,16 +73,28 @@ export async function loadWorld(onProgress: (fraction: number) => void): Promise
     }
     return loadTextures(manifest, get);
   })();
-  const [river, bridges, landmarks, trees, terrain, floor, city, water, tex] = await Promise.all([
+  const landmarksP = json<LandmarksJson>(FILES.landmarks);
+  const heroes = (async () => {
+    const withModel = (await landmarksP).landmarks.filter((l) => l.model);
+    for (const l of withModel) {
+      all.push(l.model!);
+      GUESS[l.model!] = 1.2e5;
+    }
+    const scenes = await Promise.all(withModel.map((l) => glb(l.model!)));
+    return Object.fromEntries(withModel.map((l, i) => [l.id, scenes[i]]));
+  })();
+  const [river, bridges, landmarks, trees, terrain, floor, city, water, tex, heroModels, life] = await Promise.all([
     json<WorldFiles["river"]>(FILES.river),
     json<WorldFiles["bridges"]>(FILES.bridges),
-    json<WorldFiles["landmarks"]>(FILES.landmarks),
+    landmarksP,
     json<WorldFiles["trees"]>(FILES.trees),
     get(FILES.terrain),
     get(FILES.floor),
     glb(FILES.city),
     glb(FILES.water),
     textures,
+    heroes,
+    json<WorldFiles["life"]>(FILES.life),
   ]);
-  return { files: { river, bridges, landmarks, trees, terrain, floor }, models: { city, water, textures: tex } };
+  return { files: { river, bridges, landmarks, trees, terrain, floor, life }, models: { city, water, textures: tex, heroes: heroModels } };
 }

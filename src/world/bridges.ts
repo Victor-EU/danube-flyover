@@ -1,8 +1,9 @@
 // The Danube bridges from public/data/bridges.json (built by tools/build-bridges.ts from
-// OpenStreetMap): deck slabs on their real outlines, river piers, placeholder towers and
-// ironwork until M4's hero models, plus the queries the vehicles need (deck under/over,
-// solid obstacles). The deck sits at full height over the water and the quays, then ramps
-// down to street level on land.
+// OpenStreetMap), and the queries the vehicles need (deck under/over, solid obstacles). The
+// deck sits at full height over the water and the quays, then ramps down to street level on
+// land. The four hero bridges are modelled by tools/heroes/ on the same decks, piers, towers
+// and cable curves; only the Árpád Bridge is still built here, as deck slabs, piers and
+// blocks.
 
 import earcut from "earcut";
 import {
@@ -80,8 +81,8 @@ interface Deck {
 /** What the night lights hang on a bridge (browser only). */
 export interface BridgeLights {
   name: string;
-  /** The tower, pier and cable material, and the chains' own (Chain Bridge). */
-  material: MeshStandardMaterial;
+  /** The tower, pier and cable material, and the chains' own (Chain Bridge); null for a hero. */
+  material: MeshStandardMaterial | null;
   chain: MeshStandardMaterial | null;
   /** Cable or chain curves, one per side. */
   cables: Vector3[][];
@@ -98,7 +99,8 @@ export class Bridges {
   readonly lights: BridgeLights[] = [];
   private readonly decks: Deck[];
 
-  constructor(data: BridgesJson, private readonly river: River, private readonly terrain: Terrain, withMeshes = true) {
+  /** `heroes`: bridges (by name) whose hero model replaces the meshes built here. */
+  constructor(data: BridgesJson, private readonly river: River, private readonly terrain: Terrain, withMeshes = true, heroes: Set<string> = new Set()) {
     this.names = data.bridges.map((b) => b.name);
     this.decks = data.bridges.map((def) => {
       const ring = Float64Array.from(def.outline);
@@ -111,7 +113,7 @@ export class Bridges {
       }
       return { def, ring, box };
     });
-    for (const d of this.decks) this.build(d, withMeshes);
+    for (const d of this.decks) this.build(d, withMeshes, heroes.has(d.def.name));
   }
 
   /** Deck top at (x, z) for a bridge: full height over the water, ramping to the street on land. */
@@ -124,32 +126,29 @@ export class Bridges {
     return Math.max(ground, def.top - RAMP_SLOPE * Math.max(0, d - LEVEL_PAST_BANK));
   }
 
-  private build(deck: Deck, withMeshes: boolean): void {
+  private build(deck: Deck, withMeshes: boolean, hero: boolean): void {
     const def = deck.def;
-    const mat = new MeshStandardMaterial({ color: def.color, roughness: 0.7, flatShading: true });
-    if (withMeshes) {
+    const meshes = withMeshes && !hero;
+    const mat = meshes ? new MeshStandardMaterial({ color: def.color, roughness: 0.7, flatShading: true }) : null;
+    if (meshes) {
       const m = new Mesh(this.deckGeometry(def), new MeshStandardMaterial({ color: def.deckColor, roughness: 0.8, flatShading: true }));
       m.castShadow = m.receiveShadow = true;
       m.name = def.name;
       this.group.add(m);
-      this.lights.push({ name: def.name, material: mat, chain: null, cables: [], deckLamps: this.deckLamps(def), towerTop: def.tower?.height ?? def.top + 8 });
     }
+    if (withMeshes) this.lights.push({ name: def.name, material: mat, chain: null, cables: this.cables(def), deckLamps: this.deckLamps(def), towerTop: def.tower?.height ?? def.top + 8 });
 
     for (const p of def.piers) {
       const underside = this.topAt(def, p.cx, p.cz) - def.thickness;
-      this.addBlock(mat, p.cx, p.cz, p.ux, p.uz, p.halfU * 2, p.halfV * 2, -2, underside, false, withMeshes);
+      this.addBlock(mat, p.cx, p.cz, p.ux, p.uz, p.halfU * 2, p.halfV * 2, -2, underside, false);
     }
 
     const tw = def.tower;
     if (!tw) return;
-    // Order the towers Buda to Pest along the axis, for the cables.
-    const a0 = { x: def.axis[0], z: def.axis[1] };
-    const towers = [...def.towers].sort((p, q) => Math.hypot(p.x - a0.x, p.z - a0.z) - Math.hypot(q.x - a0.x, q.z - a0.z));
-    for (const t of towers) {
+    for (const t of this.towers(def)) {
       const off = def.width / 2 + tw.thick / 2;
-      for (const side of [-1, 1])
-        this.addBlock(mat, t.x - t.uz * off * side, t.z + t.ux * off * side, t.ux, t.uz, tw.along, tw.thick, -2, tw.height, true, withMeshes);
-      if (withMeshes) {
+      for (const side of [-1, 1]) this.addBlock(mat, t.x - t.uz * off * side, t.z + t.ux * off * side, t.ux, t.uz, tw.along, tw.thick, -2, tw.height, true);
+      if (mat) {
         const lintel = new Mesh(new BoxGeometry(def.width + tw.thick * 2, 4, tw.along), mat);
         lintel.position.set(t.x, tw.height - 2, t.z);
         lintel.rotation.y = Math.atan2(t.ux, t.uz);
@@ -157,11 +156,25 @@ export class Bridges {
         this.group.add(lintel);
       }
     }
-    if (withMeshes && def.cables && towers.length === 2) this.addCables(def, towers, mat);
+    if (mat && def.cables) {
+      const cm = def.cables === "chain" ? new MeshStandardMaterial({ color: "#3b3a37", roughness: 0.6, flatShading: true }) : mat;
+      if (def.cables === "chain") this.lights[this.lights.length - 1].chain = cm;
+      for (const pts of this.cables(def)) {
+        const tube = new Mesh(new TubeGeometry(new CatmullRomCurve3(pts), 120, def.cables === "chain" ? 0.7 : 0.5, 5), cm);
+        tube.castShadow = true;
+        this.group.add(tube);
+      }
+    }
+  }
+
+  /** The towers ordered Buda to Pest along the axis. */
+  towers(def: BridgeJson): BridgeJson["towers"] {
+    const a0 = { x: def.axis[0], z: def.axis[1] };
+    return [...def.towers].sort((p, q) => Math.hypot(p.x - a0.x, p.z - a0.z) - Math.hypot(q.x - a0.x, q.z - a0.z));
   }
 
   /** The deck slab: the outline triangulated with extra points so the ramps bend smoothly. */
-  private deckGeometry(def: BridgeJson): BufferGeometry {
+  deckGeometry(def: BridgeJson): BufferGeometry {
     const ring: XZ[] = [];
     const n = def.outline.length / 2;
     for (let i = 0; i < n; i++) {
@@ -228,8 +241,8 @@ export class Bridges {
     return geo;
   }
 
-  private addBlock(mat: MeshStandardMaterial, cx: number, cz: number, ux: number, uz: number, along: number, across: number, y0: number, y1: number, tower: boolean, withMesh: boolean): void {
-    if (withMesh) {
+  private addBlock(mat: MeshStandardMaterial | null, cx: number, cz: number, ux: number, uz: number, along: number, across: number, y0: number, y1: number, tower: boolean): void {
+    if (mat) {
       const m = new Mesh(new BoxGeometry(across, y1 - y0, along), mat);
       m.position.set(cx, (y0 + y1) / 2, cz);
       // Box depth (local z) runs along (ux, uz).
@@ -240,8 +253,14 @@ export class Bridges {
     this.obstacles.push({ cx, cz, ux, uz, halfAlong: along / 2, halfAcross: across / 2, top: y1, tower });
   }
 
-  private addCables(def: BridgeJson, towers: BridgeJson["towers"], mat0: MeshStandardMaterial): void {
-    const tw = def.tower!;
+  /**
+   * The cable, chain or truss top-chord curves, one per side (Buda to Pest): from where the
+   * deck reaches full height, over the towers, sagging between them.
+   */
+  cables(def: BridgeJson): Vector3[][] {
+    const tw = def.tower;
+    const towers = this.towers(def);
+    if (!def.cables || !tw || towers.length !== 2) return [];
     // Deck ends: where the axis first and last reaches full deck height.
     const axis: XZ[] = [];
     for (let i = 0; i < def.axis.length / 2 - 1; i++) {
@@ -251,17 +270,15 @@ export class Bridges {
       for (let d = 0; d < l; d += 2) axis.push({ x: a.x + ((b.x - a.x) * d) / l, z: a.z + ((b.z - a.z) * d) / l });
     }
     const full = axis.filter((p) => this.topAt(def, p.x, p.z) > def.top - 0.5);
-    if (full.length < 2) return;
+    if (full.length < 2) return [];
     const ends = [full[0], full[full.length - 1]];
     const anchors = [ends[0], towers[0], towers[1], ends[1]];
     const deckY = def.top + 1;
     const peakY = def.cables === "truss" ? def.top + 14 : tw.height - 3;
     const lowY = def.cables === "truss" ? def.top + 2.5 : deckY + 2;
-    const mat = def.cables === "chain" ? new MeshStandardMaterial({ color: "#3b3a37", roughness: 0.6, flatShading: true }) : mat0;
-    const lights = this.lights.find((l) => l.name === def.name)!;
-    if (def.cables === "chain") lights.chain = mat;
     const ux = towers[0].ux;
     const uz = towers[0].uz;
+    const out: Vector3[][] = [];
     for (const side of [-1, 1]) {
       const off = def.width / 2 + 0.6;
       const pts: Vector3[] = [];
@@ -276,15 +293,13 @@ export class Bridges {
           pts.push(new Vector3(a.x + (b.x - a.x) * u - uz * off * side, ya + (yb - ya) * u - sag, a.z + (b.z - a.z) * u + ux * off * side));
         }
       }
-      lights.cables.push(pts);
-      const tube = new Mesh(new TubeGeometry(new CatmullRomCurve3(pts), 120, def.cables === "chain" ? 0.7 : 0.5, 5), mat);
-      tube.castShadow = true;
-      this.group.add(tube);
+      out.push(pts);
     }
+    return out;
   }
 
   /** Lamp positions along both edges of the deck's level span, 5 m above the deck. */
-  private deckLamps(def: BridgeJson): Vector3[] {
+  deckLamps(def: BridgeJson): Vector3[] {
     const out: Vector3[] = [];
     const STEP = 22;
     for (const side of [-1, 1]) {

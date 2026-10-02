@@ -93,6 +93,7 @@ export class Lighting {
   private readonly dir = new Vector3();
   private readonly moonDir = new Vector3();
   private readonly sample = new Color();
+  private shadows = true;
 
   constructor(
     scene: Scene,
@@ -113,6 +114,21 @@ export class Lighting {
     // The moon never casts shadows; it stays in the scene by day at intensity 0.
     scene.add(this.sun, this.sun.target, this.moon, this.moon.target, this.hemi, sky.mesh);
     scene.fog = this.fog;
+  }
+
+  /**
+   * The sun's shadow map size; 0 turns shadows off by intensity (a tiny map, rendered once
+   * and never again), so no program changes.
+   */
+  setShadows(size: number): void {
+    const sh = this.sun.shadow;
+    this.shadows = size > 0;
+    sh.intensity = this.shadows ? 1 : 0;
+    const n = Math.max(16, size);
+    if (sh.mapSize.x === n) return;
+    sh.mapSize.set(n, n);
+    sh.map?.dispose();
+    sh.map = null;
   }
 
   update(st: State, renderer: WebGLRenderer, focus: Vector3, cameraPos: Vector3, dt: number): void {
@@ -139,11 +155,11 @@ export class Lighting {
     this.sky.renderEnv(renderer, e);
 
     this.sun.intensity = curve(SUN_INTENSITY, e);
-    // With the sun down the shadow map is unused: stop re-rendering it (toggling castShadow
-    // instead would recompile every material). It must still be rendered once, or the shadowed
-    // materials sample a depth texture that doesn't exist and every draw fails (a first frame at
-    // night, e.g. a jump straight to a night beat).
-    renderer.shadowMap.autoUpdate = this.sun.intensity > 0;
+    // With the sun down (or shadows off on the low tier) the shadow map is unused: stop
+    // re-rendering it (toggling castShadow instead would recompile every material). It must
+    // still be rendered once, or the shadowed materials sample a depth texture that doesn't
+    // exist and every draw fails (a first frame at night, e.g. a jump straight to a night beat).
+    renderer.shadowMap.autoUpdate = this.sun.intensity > 0 && this.shadows;
     if (this.sun.shadow.map === null) renderer.shadowMap.needsUpdate = true;
     colorCurve(SUN_COLOR, e, this.sun.color);
     this.placeShadow(focus);

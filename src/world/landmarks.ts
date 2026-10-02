@@ -1,6 +1,6 @@
 // Landmarks from public/data/landmarks.json (hand-edited): the sights the cards and the orbit
-// camera aim at and, until M4's hero models, a placeholder block per landmark at its real
-// position with a floating name label.
+// camera aim at, and a floating name label over each. Most have a hero model (world/heroes.ts);
+// a landmark with a `placeholder` and no model still gets the M1 block at its real position.
 // The same placement code serves the runtime meshes and the tools/ pipeline (which keeps the
 // filler city out of the blocks and puts them in the floor grid), so the two always agree.
 
@@ -41,10 +41,16 @@ export interface LandmarkJson {
   name: string;
   position: { lat: number; lon: number };
   triggerRadius: number;
-  /** Hero model file (M4); null while the placeholder stands in. */
+  /** Hero model file under data/ (tools/build-heroes.ts), or null. */
   model: string | null;
+  /** The card's two lines, and the paragraph shown when it opens. */
   note: string;
+  text?: string;
   illustration: string | null;
+  /** The model's height above its base (the aim point is half way up, the label above it). */
+  height?: number;
+  /** "ground" (default): terrain height at the position; "quay": on the quay strip. */
+  base?: "ground" | "quay";
   /** OSM buildings the hero replaces; the filler city leaves them out. */
   osm?: string[];
   /** Placeholder block (none for the bridges, which are their own placeholders). */
@@ -103,6 +109,7 @@ export interface Sight {
   id: string;
   name: string;
   note: string;
+  text: string;
   illustration: string | null;
   x: number;
   z: number;
@@ -117,12 +124,19 @@ export function buildSights(data: LandmarksJson, groundAt: (x: number, z: number
     const c = lonLatToLocal(l.position.lon, l.position.lat);
     const parts = placeParts(l, groundAt);
     let y: number;
-    if (parts.length) {
+    if (l.height) y = baseOf(l, groundAt) + l.height / 2;
+    else if (parts.length) {
       const base = Math.min(...parts.map((p) => p.y0));
       y = base + (Math.max(...parts.map((p) => p.top)) - base) / 2;
     } else y = Math.max(groundAt(c.x, c.z), 0) + 8;
-    return { id: l.id, name: l.name, note: l.note, illustration: l.illustration, x: c.x, z: c.z, y, radius: l.triggerRadius };
+    return { id: l.id, name: l.name, note: l.note, text: l.text ?? l.note, illustration: l.illustration, x: c.x, z: c.z, y, radius: l.triggerRadius };
   });
+}
+
+/** The height a landmark stands on. */
+export function baseOf(l: LandmarkJson, groundAt: (x: number, z: number) => number): number {
+  const c = lonLatToLocal(l.position.lon, l.position.lat);
+  return (l.base ?? l.placeholder?.base) === "quay" ? WORLD.quayHeight : Math.max(groundAt(c.x, c.z), WORLD.landBase);
 }
 
 /** True if (x, z) lies within a placed part's footprint grown by `margin`. */
@@ -147,9 +161,15 @@ export class Landmarks {
   readonly parts: PlacedPart[] = [];
   private readonly labels: Sprite[] = [];
 
-  constructor(data: LandmarksJson, groundAt: (x: number, z: number) => number) {
+  /** `modelled`: ids whose hero model is loaded (they get a label, no block). */
+  constructor(data: LandmarksJson, groundAt: (x: number, z: number) => number, modelled: Set<string> = new Set()) {
     this.list = data.landmarks;
     for (const l of this.list) {
+      if (modelled.has(l.id)) {
+        // The bridges, like the M1 decks, carry no label.
+        if (l.height) this.addLabel(l, baseOf(l, groundAt) + l.height);
+        continue;
+      }
       const placed = placeParts(l, groundAt);
       if (!placed.length) continue;
       this.parts.push(...placed);
@@ -171,12 +191,16 @@ export class Landmarks {
         this.group.add(mesh);
         top = Math.max(top, p.top);
       }
-      const label = makeLabel(l.name);
-      const c = lonLatToLocal(l.position.lon, l.position.lat);
-      label.position.set(c.x, top + 6, c.z);
-      this.labels.push(label);
-      this.group.add(label);
+      this.addLabel(l, top);
     }
+  }
+
+  private addLabel(l: LandmarkJson, top: number): void {
+    const label = makeLabel(l.name);
+    const c = lonLatToLocal(l.position.lon, l.position.lat);
+    label.position.set(c.x, top + 6, c.z);
+    this.labels.push(label);
+    this.group.add(label);
   }
 
   update(camera: Vector3): void {

@@ -176,8 +176,9 @@ export class CameraRig {
       if (deck && v.y < deck.underside) c.y = Math.min(c.y, deck.underside - 0.6);
     }
     camera.lookAt(tmpL);
-    if (Math.abs(camera.fov - p.fov) > 0.01) {
-      camera.fov = p.fov;
+    const fov = portraitFov(p.fov, camera.aspect);
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov;
       camera.updateProjectionMatrix();
     }
     const ahead = 16 - 6 * b;
@@ -257,4 +258,16 @@ export class CameraRig {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
+}
+
+/** A phone held upright keeps at least this much of the view across (degrees). */
+const MIN_HORIZONTAL_FOV = 46;
+
+/**
+ * The modes' fields of view are vertical, chosen for a landscape screen; on a tall one that
+ * leaves a slit across, so the vertical angle opens until the view is MIN_HORIZONTAL_FOV wide.
+ */
+export function portraitFov(fov: number, aspect: number): number {
+  const minV = (2 * Math.atan(Math.tan((MIN_HORIZONTAL_FOV * Math.PI) / 360) / aspect) * 180) / Math.PI;
+  return Math.max(fov, Math.min(minV, 95));
 }

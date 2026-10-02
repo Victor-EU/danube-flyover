@@ -7,9 +7,11 @@
 //   quays      stone in world space, the promenade on top lit by its lamps at night.
 //   terrain    a glow on streets and squares at night (the city's street lighting from above).
 //   floodlit   landmarks and bridge towers lit from one side (the water) or all round.
+//   hero       the hero landmarks' own layers, tinted per face, with windows that come on
+//              one by one at dusk (combined with floodlit).
 
 import { Color, type IUniform, type MeshStandardMaterial, type Texture, Vector2, Vector3 } from "three";
-import { TEXTURES } from "../config";
+import { HERO_LAYERS, HERO_UV_RANGE, TEXTURES } from "../config";
 import type { TextureSet } from "../textures";
 import { NIGHT_GLSL, SHARED } from "./night";
 import { HASH_GLSL, patchMaterial } from "./shaderPatch";
@@ -151,10 +153,15 @@ export interface Flood {
   top: number;
 }
 
-/** Floodlighting: the surface lit as if by its uplights, faded in with the night ramp. */
+/**
+ * Floodlighting: the surface lit as if by its uplights, faded in with the night ramp. An
+ * earlier patch may #define FLOOD_SCALE (the heroes' per-face response).
+ */
 export function patchFloodlit(mat: MeshStandardMaterial, flood: Flood): Record<string, IUniform> {
   const uniforms = {
+    uSunElevation: SHARED.uSunElevation,
     uNight: SHARED.uNight,
+    uTime: SHARED.uTime,
     uFloodColor: { value: flood.color },
     uFloodFrom: { value: flood.from },
     uFloodRange: { value: new Vector2(flood.base, flood.top) },
@@ -164,7 +171,15 @@ export function patchFloodlit(mat: MeshStandardMaterial, flood: Flood): Record<s
     uniforms,
     vertexPars: "varying vec3 vFloodPos;\nvarying vec3 vFloodNormal;",
     vertex: [["begin_vertex", "vFloodPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvFloodNormal = normalize(mat3(modelMatrix) * objectNormal);"]],
-    fragmentPars: "uniform float uNight;\nuniform vec3 uFloodColor;\nuniform vec3 uFloodFrom;\nuniform vec2 uFloodRange;\nvarying vec3 vFloodPos;\nvarying vec3 vFloodNormal;",
+    fragmentPars: `${NIGHT_GLSL}
+      #ifndef FLOOD_SCALE
+      #define FLOOD_SCALE 1.0
+      #endif
+      uniform vec3 uFloodColor;
+      uniform vec3 uFloodFrom;
+      uniform vec2 uFloodRange;
+      varying vec3 vFloodPos;
+      varying vec3 vFloodNormal;`,
     fragment: [
       [
         "emissivemap_fragment",
@@ -180,10 +195,90 @@ export function patchFloodlit(mat: MeshStandardMaterial, flood: Flood): Record<s
           float bays = 0.72 + 0.28 * smoothstep(0.0, 0.5, abs(fract(along) - 0.5) * 2.0 - 0.1);
           float wall = 1.0 - abs(n.y);
           float up = mix(1.25, 0.32, pow(h, 0.8));
-          totalEmissiveRadiance += uFloodColor * uNight * diffuseColor.rgb * (0.18 + 0.82 * facing) * mix(1.0, up * bays, wall);
+          totalEmissiveRadiance += uFloodColor * uNight * diffuseColor.rgb * (0.18 + 0.82 * facing) * mix(1.0, up * bays, wall) * FLOOD_SCALE;
         }`,
       ],
     ],
   });
   return uniforms;
+}
+
+/** Hero windows glow less than the city's: the floodlights carry the landmarks. */
+const HERO_WINDOW_GAIN = 1.1;
+
+/**
+ * The hero landmarks (tools/heroes/): their own layer array (HERO_LAYERS), texture
+ * coordinates in tiles, a tint per face (vertex colour), roughness per layer, and window
+ * layers whose windows come on one by one at dusk.
+ */
+export function patchHero(mat: MeshStandardMaterial, tex: TextureSet): void {
+  const n = HERO_LAYERS.length;
+  patchMaterial(mat, {
+    key: "hero",
+    uniforms: {
+      ...common(),
+      uHeroDay: { value: tex.heroDay },
+      uHeroLit: { value: tex.heroLit },
+      uHeroLitCount: { value: tex.heroLitCount },
+      uHeroRough: { value: tex.heroRoughness },
+      uHeroGrid: { value: tex.heroGrid },
+      uHeroWindowGain: { value: HERO_WINDOW_GAIN },
+    },
+    vertexPars: /* glsl */ `
+      attribute vec2 _hero;
+      varying vec2 vHeroUv;
+      varying float vHeroLayer;
+      varying float vHeroFlood;
+      varying float vHeroPlane;`,
+    vertex: [
+      [
+        "begin_vertex",
+        /* glsl */ `
+        vHeroUv = (uv - 0.5) * ${HERO_UV_RANGE.toFixed(1)};
+        vHeroLayer = floor(_hero.x * 32.0 + 0.5);
+        vHeroFlood = _hero.y * 4.0;
+        // Faces are flat-shaded, so this is constant over a face: it tells parallel walls apart.
+        vHeroPlane = dot((modelMatrix * vec4(transformed, 1.0)).xyz, normalize(mat3(modelMatrix) * objectNormal));`,
+      ],
+    ],
+    fragmentPars: /* glsl */ `
+      uniform sampler2DArray uHeroDay;
+      uniform sampler2DArray uHeroLit;
+      uniform float uHeroLitCount;
+      uniform float uHeroRough[${n}];
+      uniform vec2 uHeroGrid[${n}];
+      uniform float uHeroWindowGain;
+      varying vec2 vHeroUv;
+      varying float vHeroLayer;
+      varying float vHeroFlood;
+      varying float vHeroPlane;
+      #define FLOOD_SCALE vHeroFlood
+      ${HASH_GLSL}
+      ${NIGHT_GLSL}`,
+    fragment: [
+      [
+        "map_fragment",
+        /* glsl */ `
+        int heroLayer = int(vHeroLayer + 0.5);
+        vec2 huv = vec2(vHeroUv.x, -vHeroUv.y);
+        vec2 hgx = dFdx(huv);
+        vec2 hgy = dFdy(huv);
+        diffuseColor.rgb *= textureGrad(uHeroDay, vec3(huv, float(heroLayer)), hgx, hgy).rgb;
+        vec3 heroLit = vec3(0.0);
+        if (float(heroLayer) < uHeroLitCount - 0.5) {
+          // Each window has its own moment between +2° and -11°; a third never come on.
+          vec2 cell = floor(vHeroUv * uHeroGrid[heroLayer] + 1e-3);
+          float seed = fract(vHeroPlane * 0.0731) * 97.0;
+          float h1 = hash12(cell + seed);
+          float h2 = hash12(cell.yx * 1.37 + seed * 0.71);
+          float at = 2.0 - 13.0 * h2;
+          float on = smoothstep(at + 0.4, at - 0.4, uSunElevation) * step(0.33, h1);
+          heroLit = textureGrad(uHeroLit, vec3(huv, float(heroLayer)), hgx, hgy).rgb * on * uHeroWindowGain * (0.7 + 0.5 * h1);
+        }`,
+        true,
+      ],
+      ["roughnessmap_fragment", "roughnessFactor = uHeroRough[heroLayer];"],
+      ["emissivemap_fragment", "totalEmissiveRadiance += heroLit;"],
+    ],
+  });
 }

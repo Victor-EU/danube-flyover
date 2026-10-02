@@ -3,17 +3,25 @@
 // 1. the whole tour with no input, through the end circle and the loop: beats, mode switches,
 //    camera modes, cards, tracking error and floor contacts;
 // 2. scripted checks of pause, hand-back (with the mode rule) and the beat jumps;
-// 3. the lighting the tour sees: the night ramp at the two money shots, the sky's blend.
+// 3. the lighting the tour sees: the night ramp at the two money shots, the sky's blend;
+// 4. the heroes in the floor grid, every card's text and picture, the quality tiers and the
+//    tram lines;
+// 5. the music: licences and credits, the levelling, and which tracks a hands-off pass hears.
 // Usage: npm run simulate
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { Color, Vector4 } from "three";
+import { LOOP } from "../src/config";
 import { setPaused } from "../src/controller";
 import { Route, type RouteJson } from "../src/route";
 import { createSim, type Sim, stepSim } from "../src/sim";
 import { type SkyBlend, skyBlend } from "../src/sky";
 import { sunPosition } from "../src/sun";
 import { nightRamp } from "../src/world/night";
+import { type AudioJson, nextTrack } from "../src/audio";
+import type { LifeJson } from "../src/effects";
+import type { QualityJson } from "../src/quality";
+import type { LandmarksJson } from "../src/world/landmarks";
 import { buildWorld } from "../src/world/world";
 
 const data = (name: string) => readFileSync(new URL(`../public/data/${name}`, import.meta.url));
@@ -284,6 +292,73 @@ console.log("\n— Lighting —");
     }
   check(sums, "sky: dawn (mornings) or golden hour (evenings) plus day add up to one");
   check(night, "sky: the night panorama fades in between -6° and -12°");
+}
+
+// 4. The heroes, quality tiers and ambient life (M4).
+console.log("\n— Heroes, quality and life —");
+{
+  const lm = json<LandmarksJson>("landmarks.json").landmarks;
+  const missing = lm.filter((l) => l.model && !existsSync(new URL(`../public/data/${l.model}`, import.meta.url)));
+  check(missing.length === 0, `every landmark's model is built (${lm.filter((l) => l.model).length} models${missing.length ? `; missing ${missing.map((l) => l.id).join(", ")}` : ""})`);
+  check(lm.every((l) => !l.placeholder), "no placeholder blocks left");
+  check(lm.every((l) => l.text && l.illustration && existsSync(new URL(`../public/data/${l.illustration}`, import.meta.url))), "every card has its paragraph and illustration");
+  // The floor grid rises over the heroes, so the bird can't fly through them (15 m clearance).
+  const top = (id: string) => {
+    const sgt = world.sights.find((x) => x.id === id)!;
+    let h = 0;
+    for (let dz = -6; dz <= 6; dz += 2) for (let dx = -6; dx <= 6; dx += 2) h = Math.max(h, world.floor.surface(sgt.x + dx, sgt.z + dz, false));
+    return h;
+  };
+  const tops = { parliament: top("parliament"), matthias: top("matthias"), libertyStatue: top("libertyStatue"), palace: top("palace") };
+  console.log(`  floor over the heroes: ${Object.entries(tops).map(([k, v]) => `${k} ${v.toFixed(0)} m`).join(", ")}`);
+  check(tops.parliament > 95 && tops.libertyStatue > 155, "the bird's floor includes the dome and the statue");
+  const q = json<QualityJson>("quality.json");
+  const keys = Object.keys(q.tiers.high).sort().join();
+  check(["high", "medium", "low"].every((t) => Object.keys(q.tiers[t as "high"]).sort().join() === keys) && q.tiers.low.shadowMapSize === 0 && !q.tiers.low.reflections, "quality.json: three tiers with the same settings; low has no shadows or reflections");
+  const life = json<LifeJson>("life.json");
+  const lens = life.trams.map((t) => {
+    let l = 0;
+    let wet = 0;
+    for (let i = 3; i < t.path.length; i += 3) {
+      l += Math.hypot(t.path[i] - t.path[i - 3], t.path[i + 2] - t.path[i - 1]);
+      if (world.river.isWater(t.path[i], t.path[i + 2])) wet++;
+    }
+    return { l, wet };
+  });
+  check(lens.length === 2 && lens.every((t) => t.l > 1500 && t.wet === 0), `two tram lines on land along the banks (${lens.map((t) => `${(t.l / 1000).toFixed(1)} km`).join(", ")})`);
+}
+
+// 5. The music (after M4).
+console.log("\n— Music —");
+{
+  const { tracks } = json<AudioJson>("audio.json");
+  const file = (t: { file: string }) => new URL(`../public/data/audio/${t.file}`, import.meta.url);
+  check(tracks.length > 0 && tracks.every((t) => existsSync(file(t))), `every track is encoded (${tracks.length})`);
+  // Only licences that allow hosting the file in a public build: CC0 or CC BY, never NC or ND.
+  check(tracks.every((t) => /^(CC0 1\.0|CC BY \d\.\d)$/.test(t.licence) && t.licenceUrl && t.source && t.title && t.artist), "every track is CC0 or CC BY, with its credit");
+  check(tracks.every((t) => t.gain > 0 && t.gain < 4 && t.seconds > 60), "every track is levelled and trimmed (npm run audio)");
+  const mb = tracks.reduce((a, t) => a + statSync(file(t)).size, 0) / 1e6;
+  check(mb <= 20, `${mb.toFixed(1)} MB of music, within its 20 MB (streamed once the music is turned on)`);
+  // Two passes hands-off from 17:30, with the playlist's rule: each next track, 6 s before
+  // the end of the last, is the next one for the light.
+  const sim = createSim(route, world);
+  const { st } = sim;
+  const nightAt: number[] = [];
+  run(sim, route.totalTime, () => {
+    if (Math.round(st.t / dt) % 60 === 0) nightAt.push(nightRamp(sunPosition(st.timeOfDay).elevation));
+  });
+  // The second pass starts after the end circle and the fade through black.
+  const pass = route.totalTime + LOOP.circle + LOOP.fadeOut;
+  const night = (t: number) => nightAt[Math.min(nightAt.length - 1, Math.floor(t % pass))];
+  const played: { track: number; at: number }[] = [];
+  const last = { day: -1, night: -1 };
+  for (let t = 0; t < 2 * pass; t += tracks[played[played.length - 1].track].seconds - 6) {
+    played.push({ track: nextTrack(tracks, night(t) > 0.5 ? "night" : "day", last), at: t });
+  }
+  console.log(`  two passes hear: ${played.map((p) => `${tracks[p.track].title} at ${mmss(p.at)}`).join(", ")}`);
+  const lights = played.map((p) => tracks[p.track].light);
+  check(lights[0] === "day" && lights.slice(1).includes("night"), "a day track at golden hour, then night tracks after dusk");
+  check(new Set(played.map((p) => p.track)).size === tracks.length, "every track plays within two passes");
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");

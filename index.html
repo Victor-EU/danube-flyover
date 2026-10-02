@@ -11,7 +11,7 @@
     <div id="loading">Building Budapest…</div>
     <div id="fatal" hidden></div>
     <div id="fade"></div>
-    <div id="hint">Steer to take control: W/S speed · A/D turn · Q/E down/up · or drag<br />Space pauses · 1–9 and 0 jump to a stop on the tour</div>
+    <div id="hint"><span class="keys">Steer to take control: W/S speed · A/D turn · Q/E down/up · or drag<br />Space pauses · 1–9 and 0 jump to a stop on the tour · M for music</span><span class="touch">Drag to take control: sideways to turn, up and down to climb or dive (as the boat, to speed up)<br />Let go and the autopilot takes back over</span></div>
     <pre id="debug" hidden></pre>
     <aside id="card" aria-live="polite" aria-label="Landmark">
       <button id="card-open" type="button" aria-expanded="false" aria-controls="card-more">
@@ -19,7 +19,7 @@
         <span id="card-note"></span>
       </button>
       <div id="card-more" hidden>
-        <div id="card-art" role="img"><span>Illustration to come</span></div>
+        <img id="card-art" alt="" width="720" height="450" decoding="async" />
         <p id="card-text"></p>
       </div>
       <button id="card-close" type="button" aria-label="Close card">×</button>
@@ -28,6 +28,9 @@
     <div id="bar">
       <button id="play" type="button" aria-label="Pause the tour" title="Pause (Space)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><rect class="pause" x="3.5" y="3" width="3" height="10" rx="0.8" /><rect class="pause" x="9.5" y="3" width="3" height="10" rx="0.8" /><path class="resume" d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z" /></svg>
+      </button>
+      <button id="sound" type="button" aria-pressed="false" aria-label="Music" title="Music on (M)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path class="speaker" d="M2 6.1h2.4L7.9 3v10L4.4 9.9H2z" /><path class="waves" d="M10.2 5.7a3.2 3.2 0 0 1 0 4.6M12.1 3.8a5.8 5.8 0 0 1 0 8.4" /><path class="mute" d="M10.4 6.2l3.6 3.6M14 6.2l-3.6 3.6" /></svg>
       </button>
       <span id="mode" class="badge" data-mode="bird">Bird</span>
       <span id="pilot" class="badge">Autopilot</span>
@@ -47,12 +50,25 @@
         <li>Land: hold Q over the water. Take off: hold W at the boat's top speed.</li>
         <li>Space pauses the tour and leaves you in control. 1–9 and 0 jump to the ten stops. T hides the time slider.</li>
         <li>Landmark cards: click one to open it, Esc to close it.</li>
+        <li>The music is off until you turn it on: the speaker button in the bar, or M.</li>
       </ul>
+      <h3>Settings</h3>
+      <label class="setting">Quality
+        <select id="quality">
+          <option value="auto">Auto (measured on this device)</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <label class="setting">Music volume <input id="volume" type="range" min="0" max="1" step="0.05" /></label>
       <h3>Data</h3>
       <ul>
         <li>Buildings, the river, bridges, parks and trees: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>, available under the Open Database Licence (ODbL).</li>
         <li>Terrain: contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.</li>
       </ul>
+      <h3>Music</h3>
+      <ul id="music-credits"></ul>
       <form method="dialog"><button type="submit">Close</button></form>
     </dialog>
     <script type="module" src="/src/main.ts"></script>

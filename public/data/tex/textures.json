@@ -29,6 +29,102 @@
       "villa"
     ]
   },
+  "heroes": {
+    "day": "heroes_day.webp",
+    "lit": "heroes_lit.webp",
+    "layers": [
+      "gothic",
+      "palace",
+      "secession",
+      "market",
+      "lancet",
+      "arcade",
+      "ashlar",
+      "tiles",
+      "zsolnay",
+      "copper",
+      "iron",
+      "plain",
+      "metal"
+    ],
+    "litLayers": [
+      "gothic",
+      "palace",
+      "secession",
+      "market",
+      "lancet",
+      "arcade"
+    ],
+    "roughness": [
+      0.85,
+      0.85,
+      0.8,
+      0.85,
+      0.85,
+      0.85,
+      0.9,
+      0.72,
+      0.36,
+      0.55,
+      0.6,
+      0.85,
+      0.42
+    ],
+    "grid": [
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ]
+    ]
+  },
   "quay": "quay.webp",
   "waterNormal": "water_normal.webp",
   "skies": {
@@ -40,6 +136,8 @@
   "bytes": {
     "surfaces_day.webp": 169492,
     "surfaces_lit.webp": 78998,
+    "heroes_day.webp": 194568,
+    "heroes_lit.webp": 54606,
     "quay.webp": 11298,
     "water_normal.webp": 52872,
     "sky_dawn.webp": 29604,

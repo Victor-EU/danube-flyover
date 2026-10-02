@@ -30,17 +30,27 @@ export function buildTrees(data: TreesJson, terrain: Terrain): InstancedMesh {
 
   const t = data.trees;
   const count = t.length / 3;
+  // Instances in a shuffled (but fixed) order, so drawing only the first n of them (the lower
+  // quality tiers) thins every park evenly.
+  const order = Array.from({ length: count }, (_, i) => i);
+  let seed = 1873;
+  for (let i = count - 1; i > 0; i--) {
+    seed = (seed * 16807) % 2147483647;
+    const j = seed % (i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
   const mesh = new InstancedMesh(geo, new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), count);
   const greens = ["#6a8a4c", "#789854", "#5f7f45", "#82995a", "#738b48", "#668656"].map((c) => new Color(c));
   const m = new Matrix4();
-  for (let i = 0; i < count; i++) {
+  for (let n = 0; n < count; n++) {
+    const i = order[n];
     const [x, z, s] = [t[i * 3], t[i * 3 + 1], t[i * 3 + 2]];
     // A stable per-tree variation in height (never taller than build-floor assumes) and colour.
     const v = Math.abs((Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1);
     m.makeScale(s, s * (0.86 + v * 0.14), s);
     m.setPosition(x, terrain.heightAt(x, z) - 0.3, z);
-    mesh.setMatrixAt(i, m);
-    mesh.setColorAt(i, greens[Math.floor(v * greens.length) % greens.length]);
+    mesh.setMatrixAt(n, m);
+    mesh.setColorAt(n, greens[Math.floor(v * greens.length) % greens.length]);
   }
   mesh.castShadow = mesh.receiveShadow = true;
   mesh.name = "trees";

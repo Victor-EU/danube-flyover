@@ -125,8 +125,14 @@ export const TEXTURES = {
   skies: ["dawn", "day", "golden", "night"],
 };
 
-/** Rendering quality (M4 turns this into the low/medium/high tiers of quality.json). */
+/**
+ * The live rendering settings: the high tier until src/quality.ts applies the tier chosen
+ * from public/data/quality.json.
+ */
 export const QUALITY = {
+  /** Cap on the device pixel ratio. */
+  pixelRatio: 2,
+  /** 0: no sun shadows. */
   shadowMapSize: 2048,
   /** Planar reflections near Parliament and the Chain Bridge, at this fraction of the screen. */
   reflections: true,
@@ -134,4 +140,36 @@ export const QUALITY = {
   bloom: true,
   /** MSAA samples for the HDR scene target (the composer replaces the canvas's own AA). */
   samples: 4,
+  /** Share of the trees drawn. */
+  trees: 1,
+  anisotropy: 8,
+  /** Ambient life: tour boats, trams, gulls. */
+  life: true,
 };
+
+/**
+ * The heroes' texture layers (tools/textures/heroes.ts paints them, tools/heroes/ models
+ * with them). Each is one 512² layer of a second array texture, `tile` metres wide and tall;
+ * window layers (`lit`) hold `bays` × `rows` windows per tile and come first, in the order of
+ * the lit array. Alpha is roughness. Most are near-white detail tinted per vertex.
+ */
+export const HERO_LAYERS = [
+  { name: "gothic", tile: [8.8, 12], bays: 2, rows: 2, lit: true },
+  { name: "palace", tile: [8, 9.2], bays: 2, rows: 2, lit: true },
+  { name: "secession", tile: [7.2, 7.6], bays: 2, rows: 2, lit: true },
+  { name: "market", tile: [10, 14], bays: 2, rows: 2, lit: true },
+  { name: "lancet", tile: [9, 15], bays: 2, rows: 1, lit: true },
+  { name: "arcade", tile: [6.4, 8.4], bays: 2, rows: 2, lit: true },
+  { name: "ashlar", tile: [4, 4], bays: 1, rows: 1, lit: false },
+  { name: "tiles", tile: [4, 4], bays: 1, rows: 1, lit: false },
+  { name: "zsolnay", tile: [6, 6], bays: 1, rows: 1, lit: false },
+  { name: "copper", tile: [4, 4], bays: 1, rows: 1, lit: false },
+  { name: "iron", tile: [4, 2], bays: 1, rows: 1, lit: false },
+  { name: "plain", tile: [8, 8], bays: 1, rows: 1, lit: false },
+  { name: "metal", tile: [8, 8], bays: 1, rows: 1, lit: false },
+] as const;
+
+export type HeroLayer = (typeof HERO_LAYERS)[number]["name"];
+export const HERO_LAYER = Object.fromEntries(HERO_LAYERS.map((l, i) => [l.name, i])) as Record<HeroLayer, number>;
+/** Hero texture coordinates are stored as tiles / HERO_UV_RANGE + 0.5, so they quantise into [0, 1]. */
+export const HERO_UV_RANGE = 128;

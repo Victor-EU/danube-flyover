@@ -1,7 +1,8 @@
-// The thin bottom bar (play/pause, mode and pilot badges, time slider, sunset-run toggle, the
-// OSM credit that opens the About overlay), the landmark card, the fade to black, the fading
-// "take control" hint, and a debug panel toggled with the ` key.
+// The thin bottom bar (play/pause, music, mode and pilot badges, time slider, sunset-run toggle,
+// the OSM credit that opens the About overlay), the landmark card, the fade to black, the
+// fading "take control" hint, and a debug panel toggled with the ` key.
 
+import type { Sound, TrackJson } from "./audio";
 import { CARDS } from "./config";
 import { setPaused } from "./controller";
 import type { Sim } from "./sim";
@@ -67,6 +68,41 @@ export class Hud {
     new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", `${bar.offsetHeight}px`)).observe(bar);
   }
 
+  /** The music button, the About overlay's volume slider, and its music credits. */
+  bindSound(sound: Sound, tracks: TrackJson[]): void {
+    const button = $<HTMLButtonElement>("sound");
+    // Without tracks (no audio.json) there's nothing to turn on.
+    button.hidden = !tracks.length;
+    const show = (on: boolean) => {
+      button.setAttribute("aria-pressed", String(on));
+      button.title = on ? "Music off (M)" : "Music on (M)";
+    };
+    show(sound.on);
+    sound.onChange = show;
+    button.addEventListener("click", () => sound.toggle());
+    const range = $<HTMLInputElement>("volume");
+    range.value = String(sound.prefs.volume);
+    range.addEventListener("input", () => sound.setVolume(Number(range.value)));
+    const credits = $<HTMLUListElement>("music-credits");
+    for (const t of tracks) {
+      const li = document.createElement("li");
+      const link = (text: string, href: string) => {
+        const a = document.createElement("a");
+        a.href = href;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = text;
+        return a;
+      };
+      li.append("“", link(t.title, t.source), `” by ${t.artist}, licensed under `, link(t.licence, t.licenceUrl), ".");
+      credits.append(li);
+    }
+    // CC BY asks for changes to be indicated.
+    const note = document.createElement("li");
+    note.textContent = tracks.length ? "The tracks are trimmed, levelled and re-encoded for the web." : "No music in this build.";
+    credits.append(note);
+  }
+
   update(st: State, dt: number): void {
     if (document.activeElement !== this.slider) this.slider.value = String(st.timeOfDay);
     this.clock.textContent = formatClock(st.timeOfDay);
@@ -113,9 +149,14 @@ export class Hud {
       if (sight) {
         $("card-name").textContent = sight.name;
         $("card-note").textContent = sight.note;
-        // Placeholder until M4's illustrations and longer text: the note stands in for the paragraph.
-        $("card-text").textContent = sight.note;
-        $("card-art").setAttribute("aria-label", `Illustration of ${sight.name} (to come)`);
+        $("card-text").textContent = sight.text;
+        // The illustration (tools/cards.ts) loads when the card comes in, ready for opening.
+        const art = $<HTMLImageElement>("card-art");
+        art.hidden = !sight.illustration;
+        if (sight.illustration) {
+          art.src = `data/${sight.illustration}`;
+          art.alt = `${sight.name}, as the flyover shows it`;
+        }
       }
       this.card.classList.toggle("in", !!sight);
       this.cardExpanded = !c.expanded; // force the expanded state to refresh below

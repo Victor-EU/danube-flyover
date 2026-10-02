@@ -1,5 +1,5 @@
-// Step 6: the bird's altitude floor. A 5 m grid over the world holding, per cell, the highest
-// of terrain, building roofs, hero placeholder blocks, tree crowns (see below) and bridge towers, plus
+// Step 7: the bird's altitude floor. A 5 m grid over the world holding, per cell, the highest
+// of terrain, building roofs, the hero models, tree crowns (see below) and bridge towers, plus
 // whether the cell is open water or a tower standing in it. Bridge decks are not in the grid:
 // the runtime's deck queries decide under or over (see docs/decisions.md).
 // Writes public/data/floor.bin. Usage: npm run build-floor (after build-city)
@@ -100,6 +100,18 @@ for (const f of footprints) {
   counts.building += raise(minX, minZ, maxX, maxZ, inRing, f.top, FLOOR_KIND.land);
 }
 
+// The heroes: build-heroes lists the cells each model covers, at its triangles' tops.
+const heroOut = JSON.parse(readFileSync(new URL("./out/heroes.json", import.meta.url), "utf8")) as { nx: number; heroes: Record<string, { cells: number[] }> };
+if (heroOut.nx !== nx) throw new Error("tools/out/heroes.json is for another grid: run build-heroes again");
+for (const h of Object.values(heroOut.heroes))
+  for (let k = 0; k < h.cells.length; k += 3) {
+    const idx = h.cells[k + 1] * nx + h.cells[k];
+    if (kind[idx] === FLOOR_KIND.water || h.cells[k + 2] <= height.data[idx]) continue;
+    height.data[idx] = h.cells[k + 2];
+    counts.hero++;
+  }
+
+// Any landmark still on an M1 placeholder block.
 for (const l of landmarks)
   for (const p of placeParts(l, (x, z) => terrain.heightAt(x, z))) {
     const r = Math.hypot(p.hw, p.hd);

@@ -1,15 +1,17 @@
-// Step 5: the city. Extrudes the OSM building footprints to their tagged height (or levels ×
+// Step 6: the city. Extrudes the OSM building footprints to their tagged height (or levels ×
 // 3.3 m, or a default by building type), sits them on the terrain, colours them by district,
 // and merges them into one mesh per district. Also scatters trees from OSM tree points, tree
 // rows, woods and parks, and lays the small ponds.
 //   public/data/city.glb    buildings (one node per district) and ponds
 //   public/data/trees.json  tree positions and sizes
 //   tools/out/buildings.json  footprints and roof heights for build-floor (not committed)
-// Hero landmarks are left out: their placeholder blocks come from landmarks.json at runtime.
-// Usage: npm run build-city
+// The landmarks are left out: their OSM buildings (landmarks.json `osm`) and anything else
+// standing where a hero model does (tools/out/heroes.json, from build-heroes), and the trees
+// keep clear of them too.
+// Usage: npm run build-city (after build-heroes)
 
 import earcut from "earcut";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { TEXTURES, WORLD } from "../src/config";
 import { lonLatToLocal } from "../src/geo";
 import { worldBounds } from "../src/world/bounds";
@@ -33,6 +35,17 @@ const bridges = new Bridges(readData<BridgesJson>("bridges.json"), river, terrai
 const landmarks = readData<LandmarksJson>("landmarks.json").landmarks;
 const heroParts = landmarks.flatMap((l) => placeParts(l, (x, z) => terrain.heightAt(x, z)));
 const heroIds = new Set(landmarks.flatMap((l) => l.osm ?? []));
+// The floor cells the hero models stand on (build-heroes).
+const heroOut = JSON.parse(readFileSync(new URL("./out/heroes.json", import.meta.url), "utf8")) as { cell: number; nx: number; heroes: Record<string, { cells: number[] }> };
+const heroCells = new Set<number>();
+for (const h of Object.values(heroOut.heroes)) for (let k = 0; k < h.cells.length; k += 3) heroCells.add(h.cells[k + 1] * heroOut.nx + h.cells[k]);
+/** True if (x, z) is in a cell a hero stands on, or within `margin` cells of one. */
+const onHero = (x: number, z: number, margin = 0) => {
+  const i = Math.floor((x - b.x0) / heroOut.cell);
+  const j = Math.floor((z - b.z0) / heroOut.cell);
+  for (let dj = -margin; dj <= margin; dj++) for (let di = -margin; di <= margin; di++) if (heroCells.has((j + dj) * heroOut.nx + i + di)) return true;
+  return false;
+};
 const inBounds = (x: number, z: number, m = 0) => x > b.x0 + m && x < b.x1 - m && z > b.z0 + m && z < b.z1 - m;
 
 // --- Districts ------------------------------------------------------------------------------
@@ -147,7 +160,7 @@ for (const f of readOsm("buildings")) {
     if (!inBounds(cx, cz, 2)) return skip("outside the world");
     if (river.isWater(cx, cz)) return skip("on the water");
     if (bridges.onFootprint(cx, cz, 2)) return skip("on a bridge");
-    if (heroParts.some((hp) => inPart(hp, cx, cz, 4))) return skip("inside a hero placeholder");
+    if (onHero(cx, cz) || heroParts.some((hp) => inPart(hp, cx, cz, 4))) return skip("under a hero landmark");
     // Consistent winding: outer ring positive area, holes negative.
     if (signedArea(poly[0]) < 0) poly[0].reverse();
     for (let i = 1; i < poly.length; i++) if (signedArea(poly[i]) > 0) poly[i].reverse();
@@ -345,7 +358,7 @@ const treeOk = (x: number, z: number) => {
   const c = terrain.classAt(x, z);
   if (c === TERRAIN_CLASS.pitch || c === TERRAIN_CLASS.square || c === TERRAIN_CLASS.bed) return false;
   if (bridges.onFootprint(x, z, 4)) return false;
-  if (heroParts.some((hp) => inPart(hp, x, z, 6))) return false;
+  if (onHero(x, z, 1) || heroParts.some((hp) => inPart(hp, x, z, 6))) return false;
   return !nearBuilding(x, z);
 };
 const addTree = (x: number, z: number, s: number) => {

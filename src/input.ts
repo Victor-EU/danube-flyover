@@ -1,5 +1,6 @@
 // Keyboard, mouse drag and touch drag, normalised into steer / throttle / climb in [-1, 1].
-// W/S speed, A/D steer, Q/E altitude (Q descends). Arrow keys mirror W/A/S/D. One-shot keys
+// W/S speed, A/D steer, Q/E altitude (Q descends). Arrow keys mirror W/A/S/D. A drag steers
+// sideways; up and down it climbs (bird) or sets the speed (boat). One-shot keys
 // (Space, digits, T, Esc, `) go to the hotkey table; Space is always pause, never a button press.
 
 import type { State } from "./state";
@@ -59,13 +60,16 @@ export class Input {
     let steer = k("KeyD", "ArrowRight") - k("KeyA", "ArrowLeft");
     const throttle = k("KeyW", "ArrowUp") - k("KeyS", "ArrowDown");
     let climb = k("KeyE") - k("KeyQ");
-    // A small dead zone so a click is not a steer.
+    let drive = throttle;
+    // A small dead zone so a click is not a steer. Up and down climb and dive as the bird and
+    // set the speed as the boat (which is how a touch screen takes off: up, held).
     if (this.drag && Math.hypot(this.drag.dx, this.drag.dy) > 6) {
       steer += this.drag.dx / DRAG_RANGE;
-      climb += -this.drag.dy / DRAG_RANGE;
+      if (st.vehicle.boatness > 0.5) drive += -this.drag.dy / DRAG_RANGE;
+      else climb += -this.drag.dy / DRAG_RANGE;
     }
     st.input.steer = clamp1(steer);
-    st.input.throttle = clamp1(throttle);
+    st.input.throttle = clamp1(drive);
     st.input.climb = clamp1(climb);
     st.input.active = st.input.steer !== 0 || st.input.throttle !== 0 || st.input.climb !== 0;
     if (st.input.active) st.input.everUsed = true;

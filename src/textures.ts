@@ -1,6 +1,7 @@
 // The packed texture set from public/data/tex/ (tools/pack-textures.ts): the facade and roof
-// layers as array textures, the quay stone, the water normal map, and the four sky
-// panoramas, plus small CPU copies of the skies so lighting can sample their colours.
+// layers and the heroes' layers as array textures, the quay stone, the water normal map, and
+// the four sky panoramas, plus small CPU copies of the skies so lighting can sample their
+// colours.
 // Browser only. Images are decoded without premultiplying or colour conversion, and none is
 // flipped: v = 0 is the top row of every image.
 
@@ -11,12 +12,14 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
+  Vector2,
   type WebGLRenderer,
 } from "three";
 
 export interface TexturesJson {
   layer: number;
   surfaces: { day: string; lit: string; layers: string[]; litLayers: string[] };
+  heroes: { day: string; lit: string; layers: string[]; litLayers: string[]; roughness: number[]; grid: [number, number][] };
   quay: string;
   waterNormal: string;
   skies: Record<string, string>;
@@ -33,6 +36,11 @@ export interface SkyProbe {
 export interface TextureSet {
   surfacesDay: DataArrayTexture;
   surfacesLit: DataArrayTexture;
+  heroDay: DataArrayTexture;
+  heroLit: DataArrayTexture;
+  heroLitCount: number;
+  heroRoughness: number[];
+  heroGrid: Vector2[];
   quay: Texture;
   waterNormal: Texture;
   skies: Record<string, Texture>;
@@ -88,9 +96,11 @@ function probe(img: ImageBitmap): SkyProbe {
 export async function loadTextures(manifest: TexturesJson, get: (file: string) => Promise<ArrayBuffer>): Promise<TextureSet> {
   const img = async (file: string) => decode(await get(`tex/${file}`));
   const skyNames = Object.keys(manifest.skies);
-  const [day, lit, quay, normal, ...skies] = await Promise.all([
+  const [day, lit, heroDay, heroLit, quay, normal, ...skies] = await Promise.all([
     img(manifest.surfaces.day),
     img(manifest.surfaces.lit),
+    img(manifest.heroes.day),
+    img(manifest.heroes.lit),
     img(manifest.quay),
     img(manifest.waterNormal),
     ...skyNames.map((s) => img(manifest.skies[s])),
@@ -98,6 +108,11 @@ export async function loadTextures(manifest: TexturesJson, get: (file: string) =
   return {
     surfacesDay: arrayTexture(day, manifest.layer),
     surfacesLit: arrayTexture(lit, manifest.layer),
+    heroDay: arrayTexture(heroDay, manifest.layer),
+    heroLit: arrayTexture(heroLit, manifest.layer),
+    heroLitCount: manifest.heroes.litLayers.length,
+    heroRoughness: manifest.heroes.roughness,
+    heroGrid: manifest.heroes.grid.map(([b, r]) => new Vector2(b, r)),
     quay: texture(quay, true, true),
     waterNormal: texture(normal, false, true),
     // The skies are magnified almost everywhere: no mipmaps, so the u = 0/1 seam can't show.
@@ -107,7 +122,11 @@ export async function loadTextures(manifest: TexturesJson, get: (file: string) =
 }
 
 /** Anisotropic filtering for the surfaces seen at grazing angles (walls, quays, water). */
-export function setAnisotropy(set: TextureSet, renderer: WebGLRenderer): void {
-  const a = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  for (const t of [set.surfacesDay, set.surfacesLit, set.quay, set.waterNormal]) t.anisotropy = a;
+export function setAnisotropy(set: TextureSet, renderer: WebGLRenderer, max = 8): void {
+  const a = Math.max(1, Math.min(max, renderer.capabilities.getMaxAnisotropy()));
+  for (const t of [set.surfacesDay, set.surfacesLit, set.heroDay, set.heroLit, set.quay, set.waterNormal]) {
+    if (t.anisotropy === a) continue;
+    t.anisotropy = a;
+    t.needsUpdate = true;
+  }
 }

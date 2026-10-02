@@ -3,6 +3,8 @@
 //   surfaces_day.webp  the facade and roof layers stacked into one tall strip, one 512² layer
 //                      per TEXTURES.facades then TEXTURES.roofs (it becomes an array texture)
 //   surfaces_lit.webp  the facades' emissive layers, same order
+//   heroes_day.webp    the hero landmarks' layers (HERO_LAYERS), and heroes_lit.webp their
+//                      window layers' emissive twins
 //   quay.webp, water_normal.webp, sky_<name>.webp
 //   textures.json      the manifest the loader reads
 // These are the design's WebP fallback sizes (512² surfaces, 2048 × 1024 skies). KTX2/Basis
@@ -11,7 +13,8 @@
 
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import sharp, { type Sharp } from "sharp";
-import { TEXTURES } from "../src/config";
+import { HERO_LAYERS, TEXTURES } from "../src/config";
+import { HERO_ROUGHNESS } from "./textures/heroes";
 
 const RAW = new URL("../assets/raw/", import.meta.url);
 const OUT = new URL("../public/data/tex/", import.meta.url);
@@ -37,6 +40,8 @@ async function strip(name: string, files: string[], quality: number): Promise<vo
 const roofFile = (r: string) => `roof_${r.slice(4).toLowerCase()}.png`;
 await strip("surfaces_day.webp", [...TEXTURES.facades.map((s) => `facade_${s}_day.png`), ...TEXTURES.roofs.map(roofFile)], 88);
 await strip("surfaces_lit.webp", TEXTURES.facades.map((s) => `facade_${s}_lit.png`), 90);
+await strip("heroes_day.webp", HERO_LAYERS.map((l) => `hero_${l.name}_day.png`), 88);
+await strip("heroes_lit.webp", HERO_LAYERS.filter((l) => l.lit).map((l) => `hero_${l.name}_lit.png`), 90);
 await write("quay.webp", sharp(raw("quay_stone.png")).resize(LAYER, LAYER), 86);
 await write("water_normal.webp", sharp(raw("water_normal.png")), 94);
 for (const sky of TEXTURES.skies) await write(`sky_${sky}.webp`, sharp(raw(`sky_${sky}.png`)).resize(2048, 1024), 86);
@@ -45,6 +50,14 @@ const manifest = {
   note: "Packed by tools/pack-textures.ts from assets/raw/ (tools/gen-textures.ts). Layer order follows TEXTURES in src/config.ts.",
   layer: LAYER,
   surfaces: { day: "surfaces_day.webp", lit: "surfaces_lit.webp", layers: [...TEXTURES.facades, ...TEXTURES.roofs], litLayers: TEXTURES.facades },
+  heroes: {
+    day: "heroes_day.webp",
+    lit: "heroes_lit.webp",
+    layers: HERO_LAYERS.map((l) => l.name),
+    litLayers: HERO_LAYERS.filter((l) => l.lit).map((l) => l.name),
+    roughness: HERO_LAYERS.map((l) => HERO_ROUGHNESS[l.name]),
+    grid: HERO_LAYERS.map((l) => [l.bays, l.rows]),
+  },
   quay: "quay.webp",
   waterNormal: "water_normal.webp",
   skies: Object.fromEntries(TEXTURES.skies.map((s) => [s, `sky_${s}.webp`])),

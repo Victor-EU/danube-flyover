@@ -15,13 +15,17 @@
     "build-water": "tsx tools/build-water.ts",
     "build-terrain": "tsx tools/build-terrain.ts",
     "build-bridges": "tsx tools/build-bridges.ts",
+    "build-heroes": "tsx tools/build-heroes.ts",
     "build-city": "tsx tools/build-city.ts",
     "build-floor": "tsx tools/build-floor.ts",
-    "build-world": "npm run build-water && npm run build-terrain && npm run build-bridges && npm run build-city && npm run build-floor",
+    "build-life": "tsx tools/build-life.ts",
+    "build-world": "npm run build-water && npm run build-terrain && npm run build-bridges && npm run build-heroes && npm run build-city && npm run build-floor && npm run build-life",
     "gen-textures": "tsx tools/gen-textures.ts",
     "pack-textures": "tsx tools/pack-textures.ts",
     "textures": "npm run gen-textures && npm run pack-textures",
-    "record": "tsx tools/record.ts"
+    "record": "tsx tools/record.ts",
+    "cards": "tsx tools/cards.ts",
+    "audio": "tsx tools/audio.ts"
   },
   "dependencies": {
     "fflate": "^0.8.3",

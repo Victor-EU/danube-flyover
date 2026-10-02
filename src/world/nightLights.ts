@@ -26,6 +26,7 @@ import { WORLD } from "../config";
 import { forwardOf } from "../geo";
 import type { State } from "../state";
 import type { Bridges } from "./bridges";
+import type { Heroes } from "./heroes";
 import type { Landmarks, Sight } from "./landmarks";
 import { SHARED } from "./night";
 import type { River } from "./river";
@@ -36,8 +37,8 @@ const c = (hex: string, k: number) => new Color(hex).multiplyScalar(k);
 
 /** Floodlit landmarks: colour, strength, and whether the light comes from the water side. */
 const FLOODS: Record<string, { color: string; k: number; water: boolean; streak?: number }> = {
-  parliament: { color: "#ffcf86", k: 1.44, water: true, streak: 46 },
-  palace: { color: "#ffd59c", k: 1.17, water: true, streak: 34 },
+  parliament: { color: "#ffcf86", k: 1.15, water: true, streak: 46 },
+  palace: { color: "#ffd59c", k: 1.0, water: true, streak: 34 },
   bastion: { color: "#fff0d6", k: 1.08, water: true },
   matthias: { color: "#ffdcae", k: 0.55, water: false },
   libertyStatue: { color: "#e9f0ff", k: 1.35, water: false },
@@ -88,7 +89,7 @@ export class NightLights {
   private poolT = 0;
   readonly counts = { lamps: 0, bulbs: 0, streaks: 0 };
 
-  constructor(river: River, bridges: Bridges, landmarks: Landmarks, sights: Sight[]) {
+  constructor(river: River, bridges: Bridges, landmarks: Landmarks, sights: Sight[], heroes: Heroes) {
     const emit: { p: Vector3; color: Color; size: number }[] = [];
     const streak: { x: number; z: number; h: number; color: Color; width: number }[] = [];
     /** A streak foot on the water under (or just off the bank from) a light. */
@@ -175,17 +176,20 @@ export class NightLights {
             }
           }
         }
-      if (def.flood) {
+      // A hero bridge is lit through its own material (towers, chains and all).
+      const material = b.material ?? heroes.byName.get(b.name)?.material;
+      if (def.flood && material) {
         const flood = { color: c(def.flood[0], def.flood[1]), from: new Vector3(), base: 0, top: b.towerTop };
-        patchFloodlit(b.material, flood);
+        patchFloodlit(material, flood);
         if (b.chain) patchFloodlit(b.chain, { ...flood, color: c(def.bulbs ?? def.flood[0], 1.2) });
         this.floodlit.push(b.name);
       }
     }
 
-    // Landmarks: floodlight every placeholder part, from the water side where there is one.
+    // Landmarks: floodlight each hero (or placeholder part), from the water side where there is one.
     const byId = new Map<string, Mesh[]>();
     for (const o of landmarks.group.children) if ((o as Mesh).isMesh) (byId.get(o.name) ?? byId.set(o.name, []).get(o.name)!).push(o as Mesh);
+    for (const [id, h] of heroes.byId) byId.set(id, h.meshes);
     for (const [id, def] of Object.entries(FLOODS)) {
       const meshes = byId.get(id);
       const sight = sights.find((s) => s.id === id);
@@ -202,7 +206,8 @@ export class NightLights {
       const from = new Vector3();
       if (def.water && bank) from.set(bank.x - sight.x, 0, bank.z - sight.z).normalize().setY(0.35).normalize();
       const color = c(def.color, def.k);
-      for (const m of meshes) patchFloodlit(m.material as MeshStandardMaterial, { color, from, base, top });
+      const flood = { color, from, base, top };
+      for (const mat of new Set(meshes.map((m) => m.material as MeshStandardMaterial))) patchFloodlit(mat, flood);
       this.floodlit.push(id);
       if (bank) {
         const f = foot(bank.x, bank.z, 6);

@@ -3,6 +3,7 @@
 //   facade_<style>_day.png / _lit.png   1024², 4 bays × 4 storeys (the lit one is emissive:
 //                                       black except where light comes from)
 //   roof_<kind>.png, quay_stone.png     1024² tileable detail, tinted at runtime
+//   hero_<layer>_day.png / _lit.png     1024², the hero landmarks' layers (HERO_LAYERS)
 //   water_normal.png                    512² tileable normal map
 //   sky_<dawn|day|golden|night>.png     2048 × 1024 equirectangular panoramas
 // and docs/style-sheet.webp, the locked style reference (every texture on one sheet).
@@ -14,8 +15,9 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import sharp, { type OverlayOptions } from "sharp";
-import { TEXTURES } from "../src/config";
+import { HERO_LAYERS, TEXTURES } from "../src/config";
 import { facadeSvg, FACADE_COLOURS } from "./textures/facades";
+import { heroSvg } from "./textures/heroes";
 import { paintSky } from "./textures/sky";
 import { quaySvg, roofSvg, waterNormals } from "./textures/surfaces";
 import { rasterise } from "./textures/svg";
@@ -46,6 +48,11 @@ if (process.argv.includes("--api")) {
     const name = `roof_${roof.slice(4).toLowerCase()}.png`;
     if (want(name)) await save(name, await rasterise(roofSvg(roof)));
   }
+  for (const l of HERO_LAYERS)
+    for (const mode of l.lit ? (["day", "lit"] as const) : (["day"] as const)) {
+      const name = `hero_${l.name}_${mode}.png`;
+      if (want(name)) await save(name, await rasterise(heroSvg(l.name, mode)));
+    }
   if (want("quay_stone.png")) await save("quay_stone.png", await rasterise(quaySvg()));
   if (want("water_normal.png")) {
     const n = 512;

@@ -3,152 +3,115 @@
   "landmarks": [
     {
       "id": "japaneseGarden", "name": "Japanese Garden", "position": { "lat": 47.5342, "lon": 19.05122 }, "triggerRadius": 200,
-      "model": null, "illustration": null,
-      "note": "A small garden at the north end of Margaret Island, with ponds, a waterfall and a wooden bridge. The tour starts here."
+      "model": null, "illustration": "cards/japaneseGarden.webp",
+      "note": "A small garden at the north end of Margaret Island, with ponds, a waterfall and a wooden bridge. The tour starts here.",
+      "text": "A Japanese-style garden at the north end of Margaret Island: a pond fed by a little waterfall, rocks, a wooden bridge, water lilies and trees from the Far East. The island, 2.5 km long and almost free of cars, is a park; in the Middle Ages it held convents, among them that of Saint Margaret, the king's daughter it is named after."
     },
     {
       "id": "margaretBridge", "name": "Margaret Bridge", "position": { "lat": 47.51478, "lon": 19.04352 }, "triggerRadius": 300,
-      "model": null, "illustration": null,
-      "note": "Built in 1872–76 to a design by Ernest Goüin's French company. It bends at the middle, where a spur leads onto Margaret Island."
+      "model": "heroes/margaretBridge.glb", "illustration": "cards/margaretBridge.webp",
+      "note": "Built in 1872–76 to a design by Ernest Goüin's French company. It bends at the middle, where a spur leads onto Margaret Island.",
+      "text": "The city's second permanent bridge, built in 1872–76 by Ernest Goüin's French company. Its two halves meet at an angle mid-river, where a spur added in 1900 leads onto Margaret Island. In November 1944 the German demolition charges went off by accident with traffic on it; it was rebuilt by 1948."
     },
     {
       "id": "parliament", "name": "Hungarian Parliament", "position": { "lat": 47.50708, "lon": 19.04576 }, "triggerRadius": 400,
-      "model": null, "illustration": null,
+      "model": "heroes/parliament.glb", "illustration": "cards/parliament.webp", "height": 100,
       "note": "Imre Steindl's neo-Gothic Parliament, finished in 1904. At 268 m long, with a 96 m dome, it is the largest building in Hungary.",
-      "osm": ["relation/3199085"],
-      "placeholder": { "heading": 6, "parts": [
-        { "shape": "box", "w": 118, "d": 266, "h": 34, "color": "#e6dcc6" },
-        { "shape": "box", "w": 64, "d": 126, "h": 44, "color": "#e3d8c0" },
-        { "shape": "cyl", "r": 21, "h": 74, "color": "#dcd0b6" },
-        { "shape": "cone", "r": 23, "h": 22, "y": 74, "color": "#8a3b33" }
-      ] }
+      "text": "Imre Steindl won the competition in 1882; the building was inaugurated in 1896 and finished in 1904. Its neo-Gothic river front is 268 m long, and the dome rises 96 m, a number that recalls 896, the year the Magyars settled the land, and the millennium of 1896. The Holy Crown of Hungary is kept under the dome.",
+      "osm": ["relation/3199085"]
     },
     {
       "id": "shoes", "name": "Shoes on the Danube", "position": { "lat": 47.50397, "lon": 19.04479 }, "triggerRadius": 150,
-      "model": null, "illustration": null,
+      "model": "heroes/shoes.glb", "illustration": "cards/shoes.webp", "height": 1.2, "base": "quay",
       "note": "Sixty pairs of iron shoes on the Pest embankment: a memorial to the Jews shot into the river by Arrow Cross militiamen in 1944–45.",
-      "placeholder": { "heading": 173, "base": "quay", "parts": [
-        { "shape": "box", "w": 1.5, "d": 40, "h": 1.2, "color": "#3a3530" }
-      ] }
+      "text": "Sixty pairs of cast-iron shoes, men's, women's and children's, left at the edge of the Pest embankment. The memorial by film director Can Togay and sculptor Gyula Pauer was unveiled in 2005. In the winter of 1944–45, Arrow Cross militiamen lined Jews up here, made them take off their shoes, shot them and let the river carry them away."
     },
     {
       "id": "academy", "name": "Academy of Sciences", "position": { "lat": 47.50127, "lon": 19.04643 }, "triggerRadius": 250,
-      "model": null, "illustration": null,
+      "model": "heroes/academy.glb", "illustration": "cards/academy.webp", "height": 26,
       "note": "The Hungarian Academy of Sciences, founded in 1825 by Count István Széchenyi. Its neo-Renaissance seat opened in 1865.",
-      "osm": ["relation/11772"],
-      "placeholder": { "heading": 81, "parts": [
-        { "shape": "box", "w": 58, "d": 66, "h": 26, "color": "#d8c7a6" }
-      ] }
+      "text": "In 1825 Count István Széchenyi offered a year's income from his estates to found a learned society for the Hungarian language and the sciences. Its neo-Renaissance seat, by the Berlin architect Friedrich August Stüler, opened in 1865 on the square that now bears Széchenyi's name, at the Pest end of his Chain Bridge.",
+      "osm": ["relation/11772"]
     },
     {
       "id": "gresham", "name": "Gresham Palace", "position": { "lat": 47.49982, "lon": 19.04807 }, "triggerRadius": 400,
-      "model": null, "illustration": null,
+      "model": "heroes/gresham.glb", "illustration": "cards/gresham.webp", "height": 30,
       "note": "An Art Nouveau office building of 1906, facing the Chain Bridge across Széchenyi tér. It is now a hotel.",
-      "osm": ["relation/11847"],
-      "placeholder": { "heading": 171, "parts": [
-        { "shape": "box", "w": 46, "d": 78, "h": 30, "color": "#d3c09d" }
-      ] }
+      "text": "Built in 1906 for the London-based Gresham Life Assurance Company, to designs by Zsigmond Quittner and the Vágó brothers: Art Nouveau ironwork, Zsolnay ceramics and a glass-roofed arcade. Long neglected after the war, it was restored and reopened as a hotel in 2004, facing the Chain Bridge across Széchenyi tér.",
+      "osm": ["relation/11847"]
     },
     {
       "id": "chainBridge", "name": "Chain Bridge", "position": { "lat": 47.49898, "lon": 19.04371 }, "triggerRadius": 300,
-      "model": null, "illustration": null,
-      "note": "The first permanent bridge across the Danube in Budapest, designed by William Tierney Clark and opened in 1849."
+      "model": "heroes/chainBridge.glb", "illustration": "cards/chainBridge.webp",
+      "note": "The first permanent bridge across the Danube in Budapest, designed by William Tierney Clark and opened in 1849.",
+      "text": "Count Széchenyi's bridge: the first permanent crossing between Buda and Pest, designed by the English engineer William Tierney Clark and built under the Scottish engineer Adam Clark, no relation, it opened in 1849. Retreating German troops blew it up in January 1945; it reopened on its centenary in 1949. Stone lions guard both ends."
     },
     {
       "id": "bastion", "name": "Fisherman's Bastion", "position": { "lat": 47.50239, "lon": 19.03484 }, "triggerRadius": 250,
-      "model": null, "illustration": null,
+      "model": "heroes/bastion.glb", "illustration": "cards/bastion.webp", "height": 30,
       "note": "A neo-Romanesque terrace by Frigyes Schulek, built in 1895–1902. Its seven towers stand for the seven Magyar tribes.",
-      "osm": ["relation/17948384"],
-      "placeholder": { "heading": 159, "parts": [
-        { "shape": "box", "w": 14, "d": 150, "h": 10, "color": "#f0ebe0" },
-        { "shape": "cyl", "r": 5, "h": 14, "along": -60, "color": "#f0ebe0" },
-        { "shape": "cone", "r": 6, "h": 8, "y": 14, "along": -60, "color": "#b9b2a4" },
-        { "shape": "cyl", "r": 5, "h": 14, "along": -30, "color": "#f0ebe0" },
-        { "shape": "cone", "r": 6, "h": 8, "y": 14, "along": -30, "color": "#b9b2a4" },
-        { "shape": "cyl", "r": 5, "h": 14, "color": "#f0ebe0" },
-        { "shape": "cone", "r": 6, "h": 8, "y": 14, "color": "#b9b2a4" },
-        { "shape": "cyl", "r": 5, "h": 14, "along": 30, "color": "#f0ebe0" },
-        { "shape": "cone", "r": 6, "h": 8, "y": 14, "along": 30, "color": "#b9b2a4" },
-        { "shape": "cyl", "r": 5, "h": 14, "along": 60, "color": "#f0ebe0" },
-        { "shape": "cone", "r": 6, "h": 8, "y": 14, "along": 60, "color": "#b9b2a4" }
-      ] }
+      "text": "A lookout terrace built in 1895–1902 to designs by Frigyes Schulek, on the stretch of the medieval walls that the fishermen's guild is said to have defended. Its seven turrets stand for the seven Magyar tribes who settled the Carpathian Basin in 896, and its arcades frame the view of Parliament across the river.",
+      "osm": ["relation/17948384"]
     },
     {
       "id": "matthias", "name": "Matthias Church", "position": { "lat": 47.50202, "lon": 19.03425 }, "triggerRadius": 200,
-      "model": null, "illustration": null,
+      "model": "heroes/matthias.glb", "illustration": "cards/matthias.webp", "height": 81,
       "note": "The Church of Our Lady of Buda Castle, given its present neo-Gothic form by Frigyes Schulek in the late 19th century.",
-      "osm": ["way/37135081"],
-      "placeholder": { "heading": 69, "parts": [
-        { "shape": "box", "w": 30, "d": 58, "h": 26, "color": "#e7e1d3" },
-        { "shape": "cyl", "r": 7, "h": 60, "along": -22, "across": 12, "color": "#e7e1d3" },
-        { "shape": "cone", "r": 7.5, "h": 18, "y": 60, "along": -22, "across": 12, "color": "#7d6b4f" }
-      ] }
+      "text": "The Church of Our Lady of Buda, called after King Matthias, who married twice here. Gothic in origin, turned into a mosque under the Ottomans, it was restored by Frigyes Schulek in 1874–96 and roofed with patterned Zsolnay tiles. Franz Joseph and Elisabeth were crowned King and Queen of Hungary here in 1867.",
+      "osm": ["way/37135081"]
     },
     {
       "id": "palace", "name": "Buda Castle", "position": { "lat": 47.49577, "lon": 19.03961 }, "triggerRadius": 450,
-      "model": null, "illustration": null,
+      "model": "heroes/palace.glb", "illustration": "cards/palace.webp", "height": 66,
       "note": "The royal palace of the Hungarian kings, rebuilt many times. It now houses the National Gallery and the National Széchényi Library.",
-      "osm": ["relation/6486918"],
-      "placeholder": { "heading": 145, "parts": [
-        { "shape": "box", "w": 90, "d": 300, "h": 36, "color": "#d6c8a8" },
-        { "shape": "cyl", "r": 15, "h": 44, "color": "#d6c8a8" },
-        { "shape": "cone", "r": 17, "h": 18, "y": 44, "color": "#7d9e8f" }
-      ] }
+      "text": "The royal palace at the south end of Castle Hill, rebuilt again and again since the 13th century. Its present neo-Baroque form, with the dome over the river front, was finished in 1912 by Alajos Hauszmann after Miklós Ybl's plans. Burnt out in the siege of 1944–45 and rebuilt, it now holds the National Gallery and the National Széchényi Library.",
+      "osm": ["relation/6486918"]
     },
     {
       "id": "vigado", "name": "Vigadó", "position": { "lat": 47.49599, "lon": 19.04956 }, "triggerRadius": 500,
-      "model": null, "illustration": null,
+      "model": "heroes/vigado.glb", "illustration": "cards/vigado.webp", "height": 26,
       "note": "Pest's concert hall, designed by Frigyes Feszl and opened in 1865, on the Danube Promenade.",
-      "osm": ["way/24038230"],
-      "placeholder": { "heading": 149, "parts": [
-        { "shape": "box", "w": 56, "d": 62, "h": 26, "color": "#e1d2b5" }
-      ] }
+      "text": "Pest's concert hall, built in 1859–65 to designs by Frigyes Feszl, in a Romantic style that mixes Hungarian, Moorish and Byzantine motifs. Ferenc Liszt's oratorio The Legend of Saint Elisabeth had its premiere at the opening in 1865. Badly damaged in the war, it was rebuilt, and restored again in 2014.",
+      "osm": ["way/24038230"]
     },
     {
       "id": "elisabethBridge", "name": "Elisabeth Bridge", "position": { "lat": 47.4912, "lon": 19.0501 }, "triggerRadius": 250,
-      "model": null, "illustration": null,
-      "note": "Named after Queen Elisabeth. The white suspension bridge of 1964 replaced the original, destroyed in 1945."
+      "model": "heroes/elisabethBridge.glb", "illustration": "cards/elisabethBridge.webp",
+      "note": "Named after Queen Elisabeth. The white suspension bridge of 1964 replaced the original, destroyed in 1945.",
+      "text": "Named after Queen Elisabeth, 'Sisi', who was murdered in 1898; her statue stands by its Buda end. The first bridge, a chain bridge of 1903, was blown up in 1945, and it is the only one of the city's Danube bridges not rebuilt as it was: today's slim white suspension bridge opened in 1964."
     },
     {
       "id": "citadella", "name": "Citadella", "position": { "lat": 47.48699, "lon": 19.04627 }, "triggerRadius": 500,
-      "model": null, "illustration": null,
+      "model": "heroes/citadella.glb", "illustration": "cards/citadella.webp", "height": 10,
       "note": "A fortress the Habsburgs built on the summit of Gellért Hill in 1851–54, after the revolution of 1848–49.",
-      "placeholder": { "heading": 90, "parts": [
-        { "shape": "box", "w": 60, "d": 200, "h": 10, "color": "#bfb193" }
-      ] }
+      "text": "A fortress the Habsburgs built on the summit of Gellért Hill in 1851–54, after the revolution of 1848–49: its guns looked down on the city more than out over it, and it never saw battle. The Liberty Statue stands on the terrace in front of it, near the hill's 235 m summit.",
+      "osm": ["relation/20421437"]
     },
     {
       "id": "libertyStatue", "name": "Liberty Statue", "position": { "lat": 47.48674, "lon": 19.04803 }, "triggerRadius": 450,
-      "model": null, "illustration": null,
+      "model": "heroes/libertyStatue.glb", "illustration": "cards/libertyStatue.webp", "height": 40,
       "note": "Zsigmond Kisfaludi Strobl's 14 m statue of 1947, holding up a palm leaf above the city from Gellért Hill.",
-      "placeholder": { "heading": 0, "parts": [
-        { "shape": "cyl", "r": 4, "h": 26, "color": "#ddd7c7" },
-        { "shape": "box", "w": 3, "d": 3, "h": 14, "y": 26, "color": "#6f6a5a" }
-      ] }
+      "text": "Zsigmond Kisfaludi Strobl's bronze woman holding a palm frond, 14 m tall on a 26 m pedestal, unveiled in 1947 in memory of the Soviet liberation of the city. After 1989 the Soviet soldier from her pedestal was moved to Memento Park, and the statue was rededicated to all who gave their lives for Hungary's independence and freedom."
     },
     {
       "id": "gellertHotel", "name": "Gellért Hotel and Baths", "position": { "lat": 47.48384, "lon": 19.05221 }, "triggerRadius": 500,
-      "model": null, "illustration": null,
+      "model": "heroes/gellertHotel.glb", "illustration": "cards/gellertHotel.webp", "height": 40,
       "note": "An Art Nouveau spa hotel at the foot of Gellért Hill, opened in 1918.",
-      "osm": ["way/46769968"],
-      "placeholder": { "heading": 173, "parts": [
-        { "shape": "box", "w": 60, "d": 110, "h": 30, "color": "#e0d3b5" }
-      ] }
+      "text": "An Art Nouveau spa hotel built in 1912–18 at the foot of Gellért Hill, over hot springs that were used in the Middle Ages and by the Ottomans. The baths are lined with Zsolnay ceramics and mosaics; there is a glass-roofed hall with a pool, and an outdoor wave pool.",
+      "osm": ["way/46769968"]
     },
     {
       "id": "libertyBridge", "name": "Liberty Bridge", "position": { "lat": 47.4857, "lon": 19.05495 }, "triggerRadius": 250,
-      "model": null, "illustration": null,
-      "note": "Budapest's shortest bridge, opened in 1896 for the millennium celebrations. Turul birds crown its green ironwork."
+      "model": "heroes/libertyBridge.glb", "illustration": "cards/libertyBridge.webp",
+      "note": "Budapest's shortest bridge, opened in 1896 for the millennium celebrations. Turul birds crown its green ironwork.",
+      "text": "Opened in 1896 for the millennium, as Franz Joseph Bridge; the emperor himself drove in its last rivet, a silver one. A cantilever truss painted green, with a turul bird, the mythical falcon of the Magyars, on each of its four masts. Blown up in 1945, it was the first of the bridges rebuilt, in 1946."
     },
     {
       "id": "marketHall", "name": "Central Market Hall", "position": { "lat": 47.4866, "lon": 19.05895 }, "triggerRadius": 300,
-      "model": null, "illustration": null,
+      "model": "heroes/marketHall.glb", "illustration": "cards/marketHall.webp", "height": 31,
       "note": "Budapest's largest indoor market, designed by Samu Pecz and opened in 1897, under a roof of Zsolnay tiles.",
-      "osm": ["way/24323859"],
-      "placeholder": { "heading": 142, "parts": [
-        { "shape": "box", "w": 60, "d": 176, "h": 22, "color": "#d9b88d" },
-        { "shape": "box", "w": 50, "d": 172, "h": 9, "y": 22, "color": "#b5653a" }
-      ] }
+      "text": "Budapest's largest market hall, by Samu Pecz, opened in 1897: a steel and glass hall about 150 m long under a roof of Zsolnay tiles, with fruit, vegetables, paprika and sausage stalls on the ground floor and food counters in the gallery. Its front faces Fővám tér, at the Pest end of Liberty Bridge.",
+      "osm": ["way/24323859"]
     }
   ]
 }

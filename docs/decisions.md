@@ -2,6 +2,137 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-02 — Music
+
+- **Music only, no sound effects.** The landing and take-off cues from the open question were built first: wind as the bird and water lapping, hull hiss and a distant city as the boat, all synthesised from noise and crossfaded over the transitions, with a splash at touchdown and spray and wingbeats at lift-off. Listening to them, we dropped them: the jazz carries the flyover better on its own.
+- **Four jazz tracks by Kevin MacLeod (incompetech.com), CC BY 4.0:** "Bossa Antigua" and "Backbay Lounge" by day, "Smooth Lovin" and "Night in Venice" by night.
+  - Chosen from a licence-checked search of CC0, CC BY and public-domain jazz. MacLeod's 2017 jazz set is the best-recorded music whose licence allows hosting the files in a public build, and it downloads directly.
+  - The search turned down: anything NC or ND; Pixabay, YouTube Audio Library and Bensound terms; tracks marked as AI-generated; and public-domain recordings. Recordings that are public domain in both the US and the EU are pre-1926 78s, decades before cool jazz.
+  - Sascha Ende's piano trios (also CC BY 4.0, ende.app) were the best night candidates but need an account to download.
+  - The credit follows incompetech's format: title, "Kevin MacLeod (incompetech.com)", the licence with its link, and a note that the tracks are trimmed, levelled and re-encoded, since CC BY asks for changes to be indicated. It is in the About overlay.
+- **`npm run audio` (tools/audio.ts) prepares them.** The originals are downloaded by hand into `tools/out/audio/` and not committed. The tool:
+  - trims the silence at the ends;
+  - measures the loudness (BS.1770, K-weighted and gated);
+  - writes the gain and the length into `audio.json`;
+  - encodes AAC at 128 kb/s with macOS's afconvert, with the MP4 header times zeroed so a rerun reproduces the files.
+  - The target is -19.5 LUFS, the loudest that the most quietly mastered track reaches with its peaks at -1 dB. "Night in Venice" is mastered 8 dB hotter than the rest and plays at a gain of 0.4.
+  - 16.4 MB for 17 minutes.
+- **The music streams on demand and is off until turned on**, from the speaker button in the bar or M. Browsers block sound until the page has been interacted with, and the tour runs without input. The choice is remembered, and when it's on, the first click or key of a later visit starts the music. Nothing is fetched before then, so the 16.4 MB sits outside the initial download.
+- **Two media elements crossfade over 6 s into the next track.** Each next track is the light's next, and each light's tracks take turns. A hands-off pass hears "Bossa Antigua" at golden hour, then "Smooth Lovin" from 4:35 (after dusk) and "Night in Venice", which carries over into the next pass. That pass then has "Backbay Lounge" at golden hour, so all four play within two passes (checked by `npm run simulate`).
+  - The volume is a Web Audio gain (iOS ignores a media element's own volume), with a safety limiter.
+  - The music pauses with a hidden tab, since the tour stops there too.
+- **The About overlay's Settings gain a music volume.**
+
+## 2026-10-02 — M4 heroes
+
+**Hero models**
+
+- **The heroes are modelled in code, not in Blender or by an image-to-3D tool.** This closes the open question.
+  - A small modelling kit (`tools/heroes/kit.ts`) builds faceted walls, caps, prisms, spires, domes (lathes), hipped, gabled and mansard roofs, beams and tubes, and `npm run build-heroes` writes one meshopt-compressed glb per landmark to `public/data/heroes/`.
+  - Why: neither tool is available here, and a model in code is deterministic, reviewable and rebuilt in seconds. It also sits exactly on its OSM footprint, and the bridges on the same decks, towers and cable curves the runtime queries and hangs its lights on. Any one file can still be replaced by a hand-made model.
+- **Each building stands on its real footprint.** The walls go down to the lowest ground under it (the hill falls away to the river), and the window layers fit a whole number of bays and storeys to every wall, so no window is cut by a corner. Mansard roofs inset the footprint, falling back to a smaller inset where it would fold over.
+- **The ten heroes, in the design's order:**
+  - Parliament: the river wing, central block and east wing from OSM, four storeys of tracery windows, steep red roofs, the river pavilion, two chamber blocks and the end pavilions with spired corner turrets, a pinnacle on every buttress, and the 16-sided drum with its ribbed dome, lantern and spire, 100 m up (96 m real; the doc allows 15%).
+  - Chain Bridge: the two triumphal-arch towers on their cutwater piers, two chains a side on the runtime's curves (the bulbs sit on them), hangers every 5.5 m, the railings, anchorages and four lions.
+  - Margaret Bridge: six steel arches under the deck between the piers, bending at the island spur, with sculpted pylons over each pier.
+  - Fisherman's Bastion: plain walls down the hillside, the cloisters' arches along the top, merlons, and the seven turrets with their conical roofs.
+  - Matthias Church: one great Zsolnay roof over nave and aisles, the chancel and apse, the 80 m Matthias tower and the Béla tower.
+  - Buda Castle: the palace on its footprint with a copper mansard, and the colonnaded drum and dome over the river front.
+  - Elisabeth Bridge: white portal pylons, the main cables and hangers.
+  - Liberty Statue: the stepped base, the 26 m pedestal, the figure holding the palm frond across, and the two figures at its foot.
+  - Gellért Hotel: the secession front with its domes, the big one over the baths' corner.
+  - Liberty Bridge: the green truss on the runtime's top-chord curve, the portals over the piers and the four masts with their turul birds.
+  - Central Market Hall: brick walls, the Zsolnay gable roof with a glazed ridge, and the two front towers.
+- **The other landmarks are modelled with the same kit, so no placeholder block is left:** the Academy, Gresham Palace and the Vigadó (facade, cornice and mansard on their footprints), the Citadella's walls, and the Shoes on the Danube (sixty pairs along the quay edge). The Japanese Garden has no model: it is the island's terrain, ponds and trees.
+- **Sizes:** 16 files, 1.0 MB. The largest is the Margaret Bridge at 13,270 triangles, then Parliament at 10,113; every one is under the 20k budget.
+
+**Hero textures**
+
+- **Thirteen 512² layers in a second array texture,** at the WebP fallback size like the facades: six window layers with lit twins (Parliament's tracery, the palace, secession, the Market Hall's brick, lancets whose glass glows red, blue and gold at night, and the Bastion's arcades), and seven materials (ashlar, roof tiles, Zsolnay tiles, copper, iron, plain and metal). 243 KB.
+- They tile, rather than the design's 2048² texture per hero, because the models repeat their parts. Most are near-white detail tinted per face; the brick, the Zsolnay tiles and the stained glass carry their own colour. Roughness is set per layer, so the glazed tiles and the metal shine.
+- **Night:** the heroes take the M3 floodlight patch, scaled per face (roofs and domes take less), and their windows come on one by one between +2° and −11°, with a third never lit. The strengths were retuned for the real models: Parliament 1.44 → 1.15, the palace 1.17 → 1.0.
+
+**Pipeline and data**
+
+- **`build-heroes` is step 5, before `build-city`.** It writes `tools/out/heroes.json`: the 5 m cells each hero stands on, at its triangles' tops. `build-floor` raises those cells, so the bird can't fly through a spire, and the city and the trees keep clear of them.
+- **`landmarks.json` drops `placeholder`** for `model`, `height` (the aim point is half way up, the label above it), `base`, `text` (the card's paragraph) and `illustration`. `osm` also lists the Citadella's fort.
+- **The four hero bridges come from bridges.json through the runtime's own `Bridges`:** the deck slab, `cables()`, `towers()` and `deckLamps()`. The runtime then skips their meshes but keeps their queries and lights. The Árpád Bridge, not a hero, is still M1's blocks. Bridge sights still aim at the deck.
+- **`build-life` (step 8) traces the embankment tram lines** from the OSM tram ways, which carry no line numbers, as the longest run of track alongside each main bank. That gives 2.0 km on Pest (tram 2) and 3.0 km on Buda (trams 19 and 41), in `life.json`.
+
+**Effects and ambient life**
+
+- **The boat's wake:** a churned trail behind the stern and two arms spreading at about 19°, over the last 100 m. The foam breaks up into patches as it ages and fades over 14 s.
+- **The landing splash** (a ring and 120 droplets at 0.6 s) and **the take-off spray** (90 droplets and a ring at 0.3 s), at the times in the transition specs.
+- **Ambient life is in V1, kept simple.** This closes the open question.
+  - Two tour boats loop down the east side of the river and up the west, from below Margaret Bridge to above Liberty Bridge.
+  - Six yellow trams run on the two tram lines.
+  - 35 gulls circle in five flocks over the river, and roost at night.
+  - The boats' and trams' windows light up at night.
+  - The low tier leaves all of it out. In all it adds 9 draw calls.
+
+**Quality tiers**
+
+- **`quality.json` holds three tiers:**
+
+  | Setting | high | medium | low |
+  | --- | --- | --- | --- |
+  | Pixel-ratio cap | 2 | 1.5 | 1 |
+  | Shadow map | 2048 | 1024 | off |
+  | Planar reflections | on | on | off |
+  | Bloom | on | on | off |
+  | MSAA | 4 | 2 | 0 |
+  | Trees | 100% | 60% | 35% |
+  | Anisotropy | 8 | 4 | 2 |
+  | Ambient life | on | on | off |
+
+- **The start tier is high on desktop and medium on touch devices.** The design's 2 s probe then runs in the opening hover, and steps down a tier (twice at most) while the median frame takes over 22 ms. `?quality=low|medium|high` fixes the tier, and the About overlay has a selector.
+- **Changing tiers recompiles nothing:**
+  - shadows go off by the shadow's intensity, with a tiny map rendered once;
+  - MSAA changes by reallocating the targets;
+  - trees change by instance count, with the instances shuffled so a share thins every park evenly.
+  - The program count is 40 from the first frame through dusk, the jumps and every tier change.
+
+**Mobile pass**
+
+- **Portrait:** the vertical field of view opens until at least 46° shows across (95° at most), so the bird and the orbit target stay in frame on a phone held upright.
+- **Touch:** dragging up and down climbs or dives as the bird and sets the speed as the boat, so a touch screen can take off. The hint uses touch wording on touch screens.
+- **No WebGL2:** the message is shown over a still of golden hour over Parliament (`public/fallback.webp`), rendered by the app.
+
+**Cards**
+
+- **The opened card shows an illustration and a paragraph.**
+  - The illustrations are renders of the scene: `?record=cards` takes each landmark from a set viewpoint and hour (the bridges and the riverfront at night, the hills by day, Parliament at golden hour). `npm run cards` gives them a painted finish and writes 720 × 450 WebP, 272 KB for all 17.
+  - They stand in for the design's image-API illustrations, which need a key. They also match the world, and contain no third-party imagery or text.
+- **The paragraphs are our own,** 50–70 words each, in the new `text` field.
+
+**Code and checks**
+
+- **New modules:** `effects`, `quality` and `world/heroes`. New tools: `build-heroes`, `build-life` and `cards`, with the models in `tools/heroes/`.
+- **Shader patches stack** (the heroes take `hero` and `floodlit`), with declarations inserted in order. `NIGHT_GLSL` and `HASH_GLSL` are guarded against double inclusion.
+- **`npm run simulate` has 34 checks:** M3's 28, plus every model built, no placeholder left, every card's text and picture, the floor over the heroes (dome 106 m, statue 162 m), the quality tiers, and the two tram lines on land.
+- **Measured on the production build** at 1280 × 720 (2560 × 1440 drawn) on an Apple M3:
+  - 51–131 draw calls and 1.1–2.6 M triangles over all passes at the beat starts. That is fewer calls than M3's 85–194, since each hero is one mesh where a placeholder was several.
+  - Median frame times:
+
+    | Tier | Chain Bridge at night | Parliament at golden hour |
+    | --- | --- | --- |
+    | High | 17 ms | 24 ms |
+    | Medium | 15 ms | 16 ms |
+    | Low | 8.3 ms (the 120 Hz cap) | 8.3 ms |
+
+    So the probe would settle this machine at this size on medium.
+  - No console errors. `public/data/` is 8.4 MB and `dist/` 9.6 MB.
+- **The 30 s recording:** `tools/out/timelapse.webp` (7.2 MB, not committed).
+
+**Not done yet**
+
+- KTX2 and the full-size texture set (as in M3).
+- The image-API textures and illustrations (they need a key, and the API-terms question is still open).
+- Audio, parked until after M4: it is next.
+- The heroes are right in layout and silhouette, but simple in detail. The palace's long front repeats one bay, the Elisabeth Bridge's pylons are plain portals, and the lions are blocks.
+- A reduced draw set for the reflection pass (as in M3).
+- The vehicle question is still open (the bird is kept).
+
 ## 2026-10-02 — M3 lighting
 
 **Textures and the style sheet**

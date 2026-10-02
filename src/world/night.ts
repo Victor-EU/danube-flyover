@@ -20,11 +20,14 @@ export const SHARED = {
   uTime: { value: 0 },
 };
 
-/** GLSL twin of nightRamp, with an elevation offset (jitter) in degrees. */
+/** GLSL twin of nightRamp, with an elevation offset (jitter) in degrees; safe to include twice. */
 export const NIGHT_GLSL = /* glsl */ `
+#ifndef NIGHT_GLSL
+#define NIGHT_GLSL
 uniform float uSunElevation;
 uniform float uNight;
 uniform float uTime;
 float nightRampAt(float jitter) {
   return clamp((${NIGHT_RAMP.start.toFixed(1)} - (uSunElevation + jitter)) / ${(NIGHT_RAMP.start - NIGHT_RAMP.end).toFixed(1)}, 0.0, 1.0);
-}`;
+}
+#endif`;

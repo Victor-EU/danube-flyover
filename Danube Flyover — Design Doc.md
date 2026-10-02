@@ -35,7 +35,7 @@ The route is about 5.5 km of river, and about 8.6 km flown once the arc around P
 
 ## The experience
 
-The app opens in autopilot at golden hour, hovering above the Japanese Garden, and starts the tour after two seconds. There is no menu; the only persistent UI is a thin bottom bar with the time-of-day slider, a mode indicator (bird or boat), a play/pause button, a small "take control" hint that fades after first use, and a small "© OpenStreetMap contributors" credit that opens the About overlay.
+The app opens in autopilot at golden hour, hovering above the Japanese Garden, and starts the tour after two seconds. There is no menu; the only persistent UI is a thin bottom bar with the time-of-day slider, a mode indicator (bird or boat), a play/pause button, a music button (off until the user turns it on), a small "take control" hint that fades after first use, and a small "© OpenStreetMap contributors" credit that opens the About overlay.
 
 **The route**, north to south, with the planned camera beats. Times follow from each beat's distance and keyframed speed (`npm run timetable` prints them from `route.json`; regenerate this table after editing the route). The clock column is the sunset run (see Demo mode).
 
@@ -63,7 +63,8 @@ The app opens in autopilot at golden hour, hovering above the Japanese Garden, a
 - Autopilot is the default state. Any steering input (keys, mouse drag, touch drag) blends control to the user over 0.5 s.
 - After 3 s without input, control blends back to autopilot over 2 s. Autopilot re-joins the spline from the current position rather than snapping; if the vehicle is in a different mode from the route at that point, autopilot runs the transition first (see Manual override).
 - Pause stops the autopilot and leaves the user in free control where they are: the boat idles to a stop, and the bird, which can't hover, circles at minimum speed until the user steers. Control never blends back while paused, and the sunset-run clock stops. Resuming hands control straight back to the autopilot (the 2 s blend, without the 3 s wait).
-- Keyboard: W/S speed, A/D steer, Q/E altitude (bird; Q descends), Space pause, T toggles the time slider, 1–9 and 0 jump to beats 1–10 (through a short fade to black), Esc closes a card.
+- Keyboard: W/S speed, A/D steer, Q/E altitude (bird; Q descends), Space pause, T toggles the time slider, M turns the music on and off, 1–9 and 0 jump to beats 1–10 (through a short fade to black), Esc closes a card.
+- Touch (and mouse drag): sideways turns; up and down climbs or dives as the bird, and sets the speed as the boat (so a held drag up takes off).
 
 **Landmark cards**: when the camera is within a landmark's trigger radius and it is in frame, a small card slides in with the name and a two-line note. Clicking expands it to an illustration and a short paragraph. Cards never block the view and never pause the tour. One card shows at a time (rules under Landmark triggers).
 
@@ -79,10 +80,10 @@ The app opens in autopilot at golden hour, hovering above the Japanese Garden, a
 2. *Water*: the river polygon as a flat mesh at 0 m with an animated normal map, reflections (planar near the two money shots, a reflection probe elsewhere, plus light streaks at night; see Night) and a foam/wake decal under the boat.
 3. *Embankments and quays*: extruded strips along both banks with a generated stone texture; tram tracks on the Buda side as a decal.
 4. *Filler buildings*: OSM footprints extruded to tagged height (or levels × 3.3 m, default 18 m), merged into a handful of meshes per district (every footprint is unique, so they are merged, not instanced), textured with 6 to 8 generated facade atlases chosen by district and height. Window emissive mask for night.
-5. *Hero landmarks*: hand-made or image-to-3D simplified meshes for Parliament, Buda Castle, Fisherman's Bastion with Matthias Church, Chain Bridge, Elisabeth Bridge, Liberty Bridge, Margaret Bridge, Gellért Hotel, Liberty Statue, Central Market Hall. Each under 20k triangles, each with a day texture and an emissive night texture.
+5. *Hero landmarks*: modelled in code (`tools/heroes/`) on their OSM footprints and the bridges' decks: Parliament, Buda Castle, Fisherman's Bastion with Matthias Church, Chain Bridge, Elisabeth Bridge, Liberty Bridge, Margaret Bridge, Gellért Hotel, Liberty Statue, Central Market Hall, and with the same kit the other landmarks on the cards. Each under 20k triangles, textured from shared day layers, with window masks for the night.
 6. *Vegetation*: Margaret Island and the hills as instanced low-poly trees, 3 or 4 species, billboards beyond 500 m.
 7. *Backdrop*: a ring of painted hills and city silhouette at 2 km, plus the skydome.
-8. *Life*: a few trams on the Buda embankment, two or three ambient boats on fixed loops, birds as particles. Optional; adds a lot.
+8. *Life*: trams on both embankments, two tour boats on a loop up and down the river, and flocks of gulls (left out on the low tier).
 
 **Art direction.** Stylized, warm, between a travel poster and an animated-film background. Palette anchored on Budapest stone (warm ochres and creams), slate and copper roofs, dark teal water, and gold night lighting. Low-poly geometry with clean silhouettes, soft ambient occlusion, light fog. No photographs, no text on buildings. One style sheet image is generated first and used as a reference for every later generated texture so the world reads as one hand.
 
@@ -100,20 +101,24 @@ All geometry comes from open data, processed once by offline scripts into static
 | Terrain | Copernicus GLO-30 DEM (30 m), optionally resampled to 10 m with smoothing | Free, attribution | Script: clip; subtract the river level (about 100 m above sea level) so the water sits at 0 m; flatten Pest and the islands, and remove buildings and trees on Buda (a morphological opening, with level pads for the widest footprints), because GLO-30 is a surface model that includes them; export a 10 m height grid (`terrain.bin`). If building bumps survive on Buda, hand-sculpt the two hills from contours instead |
 | Roads, tram lines, parks, trees | OSM `highway`, `railway=tram`, `leisure=park`, `natural=tree` | ODbL | Decals and instance point lists |
 | Boat route and piers | BKK GTFS open data (lines D11, D12, D14) | Open | Optional; pier positions for boat-mode stops |
-| Hero landmark meshes | Hand-modelled in Blender from reference, or generated image → image-to-3D tool → cleanup | Own work | Export glTF with day and emissive textures |
-| Facade atlases, quays, roofs | Procedural (`tools/textures/`, the current set), or the OpenAI image API, 1024×1024, tileable, flat lighting, from the style sheet | Own work (check API terms) | Packed by `pack-textures.ts`: an array texture of 512² layers in WebP now; KTX2/Basis compression, mipmaps with the full-size set |
+| Hero landmark meshes | Modelled in code from reference dimensions, on the OSM footprints and `bridges.json` (`tools/heroes/`) | Own work | `build-heroes`: one meshopt-compressed glb per landmark; their texture layers are painted with the facades |
+| Facade atlases, quays, roofs, hero layers | Procedural (`tools/textures/`, the current set), or the OpenAI image API, 1024×1024, tileable, flat lighting, from the style sheet | Own work (check API terms) | Packed by `pack-textures.ts`: array textures of 512² layers in WebP now; KTX2/Basis compression, mipmaps with the full-size set |
 | Skydome panoramas | Procedural (the current set), or the OpenAI image API: 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | 2048×1024 WebP now; generated ones below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
-| Landmark illustrations | OpenAI image API, one per landmark, style sheet as reference | Own work | WebP, shown in cards |
+| Music | Four jazz tracks by Kevin MacLeod (incompetech.com): "Bossa Antigua" and "Backbay Lounge" by day, "Smooth Lovin" and "Night in Venice" by night | CC BY 4.0, credit in the About overlay | `npm run audio` (macOS: afconvert): trimmed, levelled to -19.5 LUFS (BS.1770), AAC at 128 kb/s in `public/data/audio/` |
+| Landmark illustrations | Rendered from the scene, one per landmark, at a set viewpoint and hour (`?record=cards`); the OpenAI image API, style sheet as reference, later | Own work | `npm run cards`: a painted finish, 720×450 WebP, shown in cards |
 
-**Pipeline scripts** (`tools/`, TypeScript run with tsx, run once and committed outputs; `npm run build-world` runs steps 2 to 6 in order):
+**Pipeline scripts** (`tools/`, TypeScript run with tsx, run once and committed outputs; `npm run build-world` runs steps 2 to 8 in order):
 
 1. `fetch-osm.ts` and `fetch-dem.ts`: the Overpass queries and the GLO-30 window; save the raw extracts to `tools/osm/` (GeoJSON) and `tools/dem/`.
 2. `build-water.ts`: unions and clips the river areas; writes `river.json` (water polygon, banks, centreline) and `water.glb` (river mesh with UVs for flow direction, and the quays).
 3. `build-terrain.ts`: DEM resample, river-level offset, flattening and building removal; writes `terrain.bin` (heights plus a landcover class per sample).
 4. `build-bridges.ts`: deck outlines, piers and pylons from OSM, with hand-set deck heights and styles; writes `bridges.json`.
-5. `build-city.ts`: projects, extrudes, assigns district and one of eight facade styles (by type, district and height) and a roof kind, writes `city.glb` and `trees.json`; leaves out the buildings that `landmarks.json` says a hero replaces.
-6. `build-floor.ts`: combines the terrain, building and hero heights, tree crowns and bridge towers into `floor.bin`, a 5 m height grid for the bird's altitude floor. Bridge decks stay out of the grid: the runtime tests the deck outlines directly.
-7. `gen-textures.ts` (M3): paints the texture set and the style sheet, writes lossless PNGs to `assets/raw/`. The default is procedural (deterministic and offline); with `--api` it prompts the image API with the style sheet attached. `pack-textures.ts` then packs `assets/raw/` into `public/data/tex/` (WebP at the fallback sizes now; KTX2 later). `npm run textures` runs both.
+5. `build-heroes.ts`: models the landmarks in code (`tools/heroes/`) on their OSM footprints and the bridges' decks, towers and cable curves; writes `heroes/<id>.glb`, and lists the cells each hero stands on for the next two steps.
+6. `build-city.ts`: projects, extrudes, assigns district and one of eight facade styles (by type, district and height) and a roof kind, writes `city.glb` and `trees.json`; leaves out the buildings a hero replaces (`osm` in `landmarks.json`) or stands on.
+7. `build-floor.ts`: combines the terrain, building and hero heights, tree crowns and bridge towers into `floor.bin`, a 5 m height grid for the bird's altitude floor. Bridge decks stay out of the grid: the runtime tests the deck outlines directly.
+8. `build-life.ts`: traces the tram lines along both embankments from the OSM tram ways; writes `life.json`.
+9. `gen-textures.ts` (M3): paints the texture set and the style sheet, writes lossless PNGs to `assets/raw/`. The default is procedural (deterministic and offline); with `--api` it prompts the image API with the style sheet attached. `pack-textures.ts` then packs `assets/raw/` into `public/data/tex/` (WebP at the fallback sizes now; KTX2 later). `npm run textures` runs both.
+10. `audio.ts` (after M4): decodes the music's originals from `tools/out/audio/` (downloaded by hand, not committed), trims the silence at the ends, measures each track's loudness and writes the gain that levels it and its length into `audio.json`, and encodes it as an .m4a. `npm run audio`.
 
 The autopilot spline and its beat keyframes are built at load from the hand-edited `route.json`; `npm run timetable` prints the beat timetable (each beat's start time from arc length and speed) used in the route table above.
 
@@ -126,7 +131,7 @@ The autopilot spline and its beat keyframes are built at load from the hand-edit
 - Request tileable output and verify seams with a quick 2×2 tile check before accepting.
 - Keep prompts in `tools/prompts/` so textures can be regenerated consistently.
 
-**Attribution**: an "About" overlay credits OpenStreetMap contributors (ODbL) and Copernicus, opened from a small "© OpenStreetMap contributors" credit that is always visible in the bottom bar. This is mandatory for OSM-derived data. The OSM extracts committed to the repo (raw GeoJSON under `tools/` and the JSON derived from it) are themselves an ODbL database, so they carry an ODbL licence note.
+**Attribution**: an "About" overlay credits OpenStreetMap contributors (ODbL), Copernicus and the music (CC BY 4.0: title, artist, licence, and a note that the tracks are trimmed and re-encoded), opened from a small "© OpenStreetMap contributors" credit that is always visible in the bottom bar. This is mandatory for OSM-derived data. The OSM extracts committed to the repo (raw GeoJSON under `tools/` and the JSON derived from it) are themselves an ODbL database, so they carry an ODbL licence note.
 
 ## Technical architecture
 
@@ -150,19 +155,21 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `tour` | The loop and the beat jumps, both cut through black | autopilot, keys | fade, reset |
 | `scene` | Loads and places terrain, water, city, heroes, trees, backdrop; owns the surface shaders (facades, quays, floodlights), the water shader and the night light groups with the point-light pool (`world/`) | assets | three.js scene graph |
 | `lighting` | Sun and moon directional lights, hemisphere light, the sky dome (`sky`), fog, exposure and bloom curves, the shared night ramp; every curve keyed to sun elevation | time of day | light state |
-| `hud` | Bottom bar, time slider, mode badge, OSM credit, landmark cards, about overlay | state | DOM |
+| `hud` | Bottom bar, time slider, mode badge, music button, OSM credit, landmark cards, about overlay | state | DOM |
+| `audio` | The music: off until turned on from a user gesture (remembered); two streamed media elements crossfading over 6 s into the next track for the light (day tracks until dusk, night tracks after); a Web Audio gain for the volume and a safety limiter; pauses with a hidden tab | audio.json, night ramp | sound |
 | `effects` | Boat wake, splash on landing, foam, birds, ambient boats and trams | vehicle pose, mode | scene objects |
-| `render` | Renderer, the planar reflection pass, post-processing (bloom, tone mapping, `post`), resize, quality tiers | scene, camera | frame |
+| `render` | Renderer, the planar reflection pass, post-processing (bloom, tone mapping, `post`), resize, quality tiers and the frame-time probe (`quality`) | scene, camera | frame |
 
 **Mode state machine**: `BIRD` → `LANDING` → `BOAT` → `TAKEOFF` → `BIRD`. Landing starts when altitude drops below 2 m over water with downward velocity (manual) or on a keyframe (autopilot); it runs for 2 s during which the vehicle decelerates to boat speed and the camera lowers. Take-off is the mirror, 2.5 s, and never starts under a bridge deck or within 30 m before one. Inputs during a transition are ignored.
 
 **Key data files**
 
 - `route.json`: an ordered list of control points `{lat, lon, alt, speed, mode, hold?, beat?, timeOfDay?, camera?}`. `mode` applies from that point on; heading comes from the spline. A beat is anchored to the point where it starts (`beat: {id, name}`), so editing points never invalidates a hand-written arc length; `camera: {mode, target?}` sets the camera mode from that point to the next camera key (`target` is a landmark id); `timeOfDay` keys the sunset-run clock at that point.
-- `landmarks.json`: `{id, name, position, triggerRadius, model, note, illustration, osm?, placeholder?}`; `osm` lists the OSM buildings the hero replaces, and `placeholder` describes the block that stands in until the hero model arrives.
-- `quality.json`: three tiers (low, medium, high) setting shadow map size, reflection resolution, tree count, bloom on/off.
+- `landmarks.json`: `{id, name, position, triggerRadius, model, height?, base?, note, text, illustration, osm?}`; `model` is the hero's glb, `height` sets the aim point (half way up) and the label, `note` is the card's two lines and `text` its paragraph, and `osm` lists the OSM buildings the hero replaces.
+- `audio.json`: the music, hand-edited: `{file, original, title, artist, licence, licenceUrl, source, light, gain, seconds}`; `light` is `day` or `night`, and `npm run audio` writes `gain` and `seconds`.
+- `quality.json`: three tiers (low, medium, high) setting the pixel-ratio cap, shadow map size, planar reflections and their resolution, bloom, MSAA, the share of trees, anisotropy and ambient life; plus the start tier for desktop and touch devices and the probe's settings.
 - `floor.bin`: the bird's altitude-floor grid, written by `build-floor.ts`. `terrain.bin` and `floor.bin` share one format: a JSON header and typed-array layers, zlib-compressed.
-- Written by the pipeline, read at load: `river.json`, `bridges.json`, `trees.json`, `terrain.bin`, `city.glb`, `water.glb`.
+- Written by the pipeline, read at load: `river.json`, `bridges.json`, `trees.json`, `terrain.bin`, `city.glb`, `water.glb`, `heroes/*.glb`, `life.json`.
 
 **Coordinate helpers** (`src/geo.ts`): `lonLatToLocal(lon, lat)` and back, so hand-edited route points can be written in lat/lon and converted at load time.
 
@@ -255,6 +262,7 @@ Target: 60 fps at 1080p on a 2022 integrated-GPU laptop (high tier), 30 fps on a
 | Time to first frame | 3 s | On a 50 Mbps connection. The first frame needs only the first-frame set (procedural sky, water, terrain, city), at most 12 MB, about 2 s; progressive loading with a styled loading screen |
 | Shadow map | 2048² high / 1024² medium / off low | One cascade, fitted to a 600 m box around the camera |
 | Water reflection | 50% resolution planar / probe | Planar reflection costs a second scene pass; use it only near the two money shots (inside the Parliament and Chain Bridge trigger radii) on medium and high; elsewhere a probe, plus streak sprites for night lights |
+| Music | 20 MB, streamed on demand | Four AAC tracks, 16.4 MB; nothing is fetched until the music is turned on, so it is outside the initial download |
 | JS main thread per frame | 6 ms | Physics, spline sampling and HUD are trivial; keep allocations out of the loop |
 
 **Constraints**
@@ -281,7 +289,9 @@ Each gate is a yes/no check on a running build; the next phase does not start un
 
 **M3 Lighting** adds the full lighting curves, night light groups, emissive crossfade, generated panoramas and facade atlases, the water shader with reflections and night light streaks, bloom and tone mapping. This is where the style sheet is generated and locked.
 
-**M4 Heroes** replaces placeholders with the ten hero models (Parliament first, then the Chain Bridge, then the rest in route order), adds effects, quality tiers and the mobile pass. Audio is parked until after M4 (see Open questions).
+**M4 Heroes** replaces placeholders with the ten hero models (Parliament first, then the Chain Bridge, then the rest in route order), adds effects, quality tiers, the mobile pass, and the cards' illustrations and paragraphs. Audio is parked until after M4 (see Open questions).
+
+**After M4: music** adds the jazz (four CC BY tracks), the music button and M key, the volume setting and the credits. Music only: no sound effects.
 
 **Working rules for the implementation**
 
@@ -291,11 +301,11 @@ Each gate is a yes/no check on a running build; the next phase does not start un
 
 ## Open questions
 
-- [ ] Hero models: hand-model in Blender, or generate illustrations and run them through an image-to-3D tool? Decide after M1 by trying Parliament both ways.
+- [x] Hero models: modelled in code (`tools/heroes/`) on the OSM footprints, rather than in Blender or with an image-to-3D tool: neither was available, and models in code are deterministic, reviewable and fit their sites exactly. Any one can still be replaced by a hand-made glb.
 - [ ] Vehicle: a bird, a small plane, or an abstract glider? The bird fits the city; a glider is easier to animate. Decide before M0 ends.
 - [ ] Narration: text cards only in V1, or add generated voice-over per beat? Affects beat durations.
 - [ ] Image API terms: confirm generated textures can be redistributed in a public build.
 - [x] Planar reflections on medium tier: keep, but only near the two money shots (Parliament and the Chain Bridge); probe and light streaks everywhere else.
 - [ ] Season: the DEM and sun are set for 1 October. Should the trees carry autumn colour, or stay neutral green?
-- [ ] Ambient life (trams, boats, birds): V1 or stretch? Cheap to add, but it is tuning time.
-- [ ] Audio (parked until after M4): search for freely licensed jazz we can use; the licence must allow redistribution in a public static build. When it is picked up it needs an `audio` module, a sound-on toggle (browsers block sound until the user interacts, and the tour runs without input), a slot in the download budget, and the landing and take-off cues (wind fading out, water and distant city fading in) that were taken out of the transition specs.
+- [x] Ambient life (trams, boats, birds): in V1, kept simple: six trams on both embankments, two tour boats, gulls over the river; off on the low tier.
+- [x] Audio: music only. Four jazz tracks by Kevin MacLeod under CC BY 4.0, which allows hosting them in a public build with a credit; an `audio` module, a music button (browsers block sound until the user interacts, and the tour runs without input) and a 20 MB on-demand slot in the budget. The landing and take-off cues were tried as synthesised wind, water and city sounds and dropped: music only.

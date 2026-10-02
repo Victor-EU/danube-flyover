@@ -53,6 +53,15 @@ body {
   display: none;
 }
 
+/* No WebGL2: the opening view as a still, the message over its lower edge. */
+#fatal.still {
+  place-items: end center;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  background: #11151c url("/fallback.webp") center / cover no-repeat;
+  color: var(--bar-fg);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
 #bar {
   position: fixed;
   left: 0;
@@ -78,7 +87,8 @@ body {
   text-align: center;
 }
 
-#play {
+#play,
+#sound {
   display: grid;
   place-items: center;
   width: 30px;
@@ -92,7 +102,9 @@ body {
 }
 
 #play:hover,
-#play:focus-visible {
+#play:focus-visible,
+#sound:hover,
+#sound:focus-visible {
   border-color: var(--bar-fg);
 }
 
@@ -114,6 +126,45 @@ body {
 #play[data-paused="true"] {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* Music: muted grey and crossed out while off. */
+#sound {
+  color: var(--muted);
+}
+
+#sound[hidden] {
+  display: none;
+}
+
+#sound svg {
+  width: 15px;
+  height: 15px;
+}
+
+#sound .speaker {
+  fill: currentColor;
+}
+
+#sound .waves,
+#sound .mute {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+#sound .waves,
+#sound[aria-pressed="true"] .mute {
+  display: none;
+}
+
+#sound[aria-pressed="true"] .waves {
+  display: inline;
+}
+
+#sound[aria-pressed="true"] {
+  color: var(--bar-fg);
 }
 
 #pilot[data-paused="true"] {
@@ -217,6 +268,26 @@ body {
   color: var(--accent);
 }
 
+#about .setting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#about .setting input[type="range"] {
+  width: 160px;
+  accent-color: var(--accent);
+}
+
+#about select {
+  padding: 4px 8px;
+  border: 1px solid rgba(243, 239, 230, 0.3);
+  border-radius: 6px;
+  background: #232a36;
+  color: var(--bar-fg);
+  font: inherit;
+}
+
 #about form {
   margin-top: 14px;
   text-align: right;
@@ -252,6 +323,15 @@ body {
 
 #hint.gone {
   opacity: 0;
+}
+
+#hint .touch,
+:root.touch #hint .keys {
+  display: none;
+}
+
+:root.touch #hint .touch {
+  display: inline;
 }
 
 #fade {
@@ -332,20 +412,19 @@ body {
 }
 
 #card-art {
-  display: grid;
-  place-items: end start;
-  aspect-ratio: 16 / 9;
-  padding: 8px 10px;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
   border-radius: 6px;
-  background:
-    radial-gradient(circle at 72% 30%, rgba(255, 214, 150, 0.9), rgba(255, 214, 150, 0) 34%),
-    linear-gradient(170deg, #e7b77a 0%, #c9825a 44%, #36606a 100%);
-  font-size: 11px;
-  color: rgba(20, 24, 32, 0.66);
+  background: linear-gradient(170deg, #3a4150 0%, #252b36 100%);
 }
 
 #card-text {
   margin: 10px 0 0;
+  max-height: 40vh;
+  overflow-y: auto;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--bar-fg);
