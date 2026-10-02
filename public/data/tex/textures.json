@@ -140,10 +140,10 @@
     "heroes_lit.webp": 116646,
     "quay.webp": 57030,
     "water_normal.webp": 52872,
-    "sky_dawn.webp": 29604,
-    "sky_day.webp": 28966,
-    "sky_golden.webp": 37904,
-    "sky_night.webp": 11270
+    "sky_dawn.webp": 28810,
+    "sky_day.webp": 28134,
+    "sky_golden.webp": 37360,
+    "sky_night.webp": 11338
   },
   "full": {
     "layer": 1024,
@@ -199,6 +199,13 @@
       ]
     },
     "quay": "full/quay.ktx2",
+    "sky": 4096,
+    "skies": {
+      "dawn": "full/sky_dawn.ktx2",
+      "day": "full/sky_day.ktx2",
+      "golden": "full/sky_golden.ktx2",
+      "night": "full/sky_night.ktx2"
+    },
     "bytes": {
       "full/surfaces_facade_pestEclectic_day.ktx2": 219887,
       "full/surfaces_facade_pestClassic_day.ktx2": 213948,
@@ -239,7 +246,11 @@
       "full/heroes_hero_market_lit.ktx2": 102124,
       "full/heroes_hero_lancet_lit.ktx2": 63008,
       "full/heroes_hero_arcade_lit.ktx2": 225675,
-      "full/quay.ktx2": 241079
+      "full/quay.ktx2": 241079,
+      "full/sky_dawn.ktx2": 798240,
+      "full/sky_day.ktx2": 597866,
+      "full/sky_golden.ktx2": 943772,
+      "full/sky_night.ktx2": 159860
     }
   }
 }

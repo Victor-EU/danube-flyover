@@ -5,7 +5,7 @@
 //   roof_<kind>.png, quay_stone.png     1024² tileable detail, tinted at runtime
 //   hero_<layer>_day.png / _lit.png     1024², the hero landmarks' layers (HERO_LAYERS)
 //   water_normal.png                    512² tileable normal map
-//   sky_<dawn|day|golden|night>.png     2048 × 1024 equirectangular panoramas
+//   sky_<dawn|day|golden|night>.png     4096 × 2048 equirectangular panoramas
 // and docs/style-sheet.webp, the locked style reference (every texture on one sheet).
 //
 // The default is procedural: deterministic, offline, no licence questions. The design's image
@@ -65,7 +65,7 @@ if (process.argv.includes("--api")) {
   for (const sky of TEXTURES.skies) {
     const name = `sky_${sky}.png`;
     if (!want(name)) continue;
-    const [w, h] = [2048, 1024];
+    const [w, h] = [4096, 2048];
     await save(name, await sharp(Buffer.from(paintSky(sky, w, h)), { raw: { width: w, height: h, channels: 3 } }).png().toBuffer());
   }
 }
@@ -99,7 +99,10 @@ async function styleSheet(): Promise<void> {
     return sharp(img).extract({ left: 0, top: full - h, width: 256, height: h }).png().toBuffer();
   };
   const street = async (top: number, night: boolean) => {
-    const sky = await sharp(raw(night ? "sky_night.png" : "sky_golden.png")).extract({ left: 1040, top: 300, width: 900, height: 222 }).resize(W, 460).toBuffer();
+    // The crop was picked on a 2048-wide panorama.
+    const file = raw(night ? "sky_night.png" : "sky_golden.png");
+    const k = (await sharp(file).metadata()).width / 2048;
+    const sky = await sharp(file).extract({ left: 1040 * k, top: 300 * k, width: 900 * k, height: 222 * k }).resize(W, 460).toBuffer();
     layers.push({ input: sky, left: 0, top });
     const storeys = [5, 4, 6, 3, 3, 7, 6, 2];
     for (let k = 0; k < 8; k++) {

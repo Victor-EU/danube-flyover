@@ -2,6 +2,57 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-02 — Full-size skies, the last simple heroes, and the 2048² layers left out
+
+The gaps after KTX2: the design's 4096 × 2048 skies and 2048² hero textures, the heroes M4 left simple, and a recording from before the glider.
+
+**Skies at 4096 × 2048**
+
+- **The masters are painted at 4096 × 2048**, the same painting sampled finer, about 10 s each. The first frame's WebP is the master scaled to 2048 × 1024 (still about 30 KB each).
+- **The full-size set gains a UASTC KTX2 file per sky,** with RDO and zstd and no mipmaps, like the WebP: 2.4 MB for the four (dawn 780 KB, day 584 KB, golden 922 KB, night 156 KB). On the golden sky:
+  - ETC1S was 159 KB but 40.6 dB, with errors up to 52 in blue that band the gradients;
+  - UASTC with RDO is 54.3 dB;
+  - without RDO it was 63.6 dB but 1.2 MB, not worth the extra 300 KB.
+- **On the M3 they transcode to ASTC** (BC7 or ETC2 elsewhere), a byte a pixel: 32 MB on the GPU, the same as the half-size WebP skies decoded to RGBA. The debug panel reads `KTX2 1024², ETC2; skies 4096 × 2048, ASTC; 59 MB`.
+- **They swap in with the layers,** through uniforms the dome shares with the texture set. Both sets now wrap round the compass, so the filter blends across u = 0/1 instead of clamping at the seam.
+- **Close up, the thin cloud wisps are visibly sharper,** and the clear gradients show no banding.
+- The download is 20.7 MB with the full-size set and the cards, within the 25 MB. `pack-textures` takes about 3 minutes.
+
+**The 2048² hero layers are left at 1024²**
+
+- **The design's 2048² was one texture per hero.** The heroes use tiling layers instead (see M4 heroes), so a 1024² layer over 4–15 m of wall is already 70–256 px per metre. The glider's camera (70° tall, on a 1600 px screen) resolves the gothic layer's 100 px per metre only within about 11 m, closer than the floor lets it fly.
+- **The image API prices by output tokens, which scale with pixels.** A 2048² answer would cost about four times a 1024² one, about $0.22. With each day layer's seam repaints that's about 32 requests, roughly $7; the earlier estimate of $1.20–1.50 used the 1024² price. Sizes over 2560 × 1440 are also experimental for the API.
+- **The hero layers are 3.4 MB at 1024²**, so the download would grow by about 10 MB, to about 31 MB, over the 25 MB budget.
+- Not done, and nothing spent: it would need a decision to spend and a bigger download budget.
+
+**The last simple heroes**
+
+- **New in the kit:**
+  - `Facade`, a wall's plane for the features set on it;
+  - `portal`, an arched doorway or window standing out of the wall, with its reveals and a band round it;
+  - `rose`;
+  - `statue` (the palace portico's figure, which now uses it, its model unchanged byte for byte);
+  - `band` for plinths, string courses and cornices;
+  - `parapet`;
+  - `dormer`.
+- **Matthias Church** (186 → 1,148 triangles):
+  - buttresses with pinnacles along the nave at the lancet layer's bay lines and round the apse;
+  - the west portal under a rose window, and the south porch over the Mary portal;
+  - diagonal buttresses at the tower's foot, crockets up its spire and a band at the spire's foot;
+  - finials on the great roof's gables.
+- **The Central Market Hall** (150 → 1,332):
+  - stone bands: the plinth, a course between the two rows of arched windows, and the cornice;
+  - pilasters along the long walls;
+  - the main gate and two side doors, under the great arched window in the gable;
+  - on the towers, belfry arches, a gablet on each face of the spire, corner pinnacles, and taller spires.
+- **The Academy, Gresham Palace and the Vigadó** share one builder: walls with a plinth, a string course, a cornice and a parapet, with the mansard behind it. Bays stand out of the fronts and rise a storey over the cornice under their own crown, with arched doorways and dormers.
+  - The Academy (1,246): corner pavilions with the six scholars' statues, two on each of three corners; the main hall's bay on the Danube front; and the entrance bay on Roosevelt tér with three arched doors.
+  - Gresham Palace (662): the arched gateway to its arcade, under a curved gable with a great window, and a pavilion at each end.
+  - The Vigadó (1,339): the arcade of five arches, the crenellated attic between two domed turrets, and a pavilion at each end.
+- They follow the buildings in broad strokes from reference; the ornament stays in the texture layers. The 16 hero files are 1.1 MB. The floor grid is rebuilt, with 3,669 hero cells.
+
+**The 30 s recording** is redone with all of the above: `tools/out/timelapse.webp`, 300 frames, 6.7 MB.
+
 ## 2026-10-02 — KTX2 textures
 
 The last item M3 and M4 left: KTX2/Basis compression, and the full-size set.
@@ -19,7 +70,7 @@ The last item M3 and M4 left: KTX2/Basis compression, and the full-size set.
   - the water's 512² normal map.
 - **Loading:**
   - The first frame draws with the WebP set, as before.
-  - Then the KTX2 files load and three's KTX2Loader transcodes them in workers. Its transcoder (0.58 MB) is served at `basis/` from node_modules by `tools/basisPlugin.ts`, and copied there in the build.
+  - Then the KTX2 files load and three's KTX2Loader transcodes them in workers. It finds its transcoder (0.58 MB) through `import.meta.url`, which Vite resolves in the dev server and copies into the build's `assets/`. (A plugin first served it at `basis/` as well, which shipped it twice.)
   - The layers are stacked, uploaded and swapped in all at once, through uniforms the materials share. The WebP set is then released.
   - It stays on the WebP when the GPU takes no compressed format, since RGBA at full size would be four times the memory, or when anything fails (tried with one file missing).
   - `?textures=webp` keeps the WebP, to compare. Recordings (`?record=`) wait for the full-size set.

@@ -2,7 +2,7 @@
 // layers and the heroes' layers as array textures, the quay stone, the water normal map, and
 // the four sky panoramas, plus small CPU copies of the skies so lighting can sample their
 // colours. The first frame draws with the half-size WebP set; the full-size KTX2 set takes
-// its place once it has loaded (upgradeTextures).
+// its place once it has loaded (upgradeTextures), the skies with it at 4096 × 2048.
 // Browser only. Images are decoded without premultiplying or colour conversion, and none is
 // flipped: v = 0 is the top row of every image (KTX2 files are stored top row first too).
 
@@ -13,6 +13,7 @@ import {
   type IUniform,
   LinearFilter,
   LinearMipmapLinearFilter,
+  ClampToEdgeWrapping,
   RepeatWrapping,
   RGB_ETC1_Format,
   RGB_ETC2_Format,
@@ -43,6 +44,9 @@ export interface TexturesJson {
     surfaces: { day: string[]; lit: string[] };
     heroes: { day: string[]; lit: string[] };
     quay: string;
+    /** The skies' width (their height is half), and a UASTC file per sky. */
+    sky: number;
+    skies: Record<string, string>;
     bytes: Record<string, number>;
   };
 }
@@ -74,6 +78,8 @@ export interface TextureSet {
    * full-size set takes the half-size one's place everywhere at once.
    */
   uniforms: Record<Upgradable, IUniform<Texture>>;
+  /** The skies' uniforms, by name, for the dome (the same way). */
+  skyUniforms: Record<string, IUniform<Texture>>;
   full: TexturesJson["full"];
   /** What's in use, for the debug panel. */
   status: string;
@@ -147,14 +153,27 @@ export async function loadTextures(manifest: TexturesJson, get: (file: string) =
     heroGrid: manifest.heroes.grid.map(([b, r]) => new Vector2(b, r)),
     quay: texture(quay, true, true),
     waterNormal: texture(normal, false, true),
-    // The skies are magnified almost everywhere: no mipmaps, so the u = 0/1 seam can't show.
-    skies: Object.fromEntries(skyNames.map((s, i) => [s, texture(skies[i], true, false, false)])),
+    skies: Object.fromEntries(skyNames.map((s, i) => [s, skyTexture(texture(skies[i], true, false, false))])),
     skyProbes: Object.fromEntries(skyNames.map((s, i) => [s, probe(skies[i])])),
     full: manifest.full,
     status: `WebP ${manifest.layer}²`,
   };
   const uniforms = Object.fromEntries(UPGRADABLE.map((k) => [k, { value: set[k] }])) as TextureSet["uniforms"];
-  return { ...set, uniforms };
+  const skyUniforms = Object.fromEntries(skyNames.map((s) => [s, { value: set.skies[s] }]));
+  return { ...set, uniforms, skyUniforms };
+}
+
+/**
+ * The skies are magnified almost everywhere: no mipmaps, so the u = 0/1 seam can't pick a
+ * smaller one there, and they wrap round the compass (u) but not past the poles (v).
+ */
+function skyTexture<T extends Texture>(tex: T): T {
+  tex.wrapS = RepeatWrapping;
+  tex.wrapT = ClampToEdgeWrapping;
+  tex.minFilter = tex.magFilter = LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 const UPGRADABLE: Upgradable[] = ["surfacesDay", "surfacesLit", "heroDay", "heroLit", "quay"];
@@ -171,17 +190,19 @@ const FORMAT_NAMES: Record<number, string> = {
 };
 
 /**
- * The full-size set (tools/pack-textures.ts: ETC1S KTX2 at the masters' 1024²) in place of
- * the half-size WebP: fetched and transcoded in workers to a format the GPU takes, a file per
- * layer, stacked here into array textures like the WebP strips, uploaded, then swapped in
- * through the shared uniforms all at once, and the WebP set released. Stays on the WebP when
- * the GPU takes no compressed format (RGBA at full size would be four times the memory), or if
- * anything fails. Resolves to whether it swapped.
+ * The full-size set (tools/pack-textures.ts: ETC1S KTX2 at the masters' 1024², UASTC skies at
+ * 4096 × 2048) in place of the half-size WebP: fetched and transcoded in workers to a format
+ * the GPU takes, a file per layer, stacked here into array textures like the WebP strips,
+ * uploaded, then swapped in through the shared uniforms all at once, and the WebP set released.
+ * Stays on the WebP when the GPU takes no compressed format (RGBA at full size would be four
+ * times the memory), or if anything fails. Resolves to whether it swapped.
  */
 export async function upgradeTextures(set: TextureSet, renderer: WebGLRenderer): Promise<boolean> {
   const full = set.full;
   if (!full) return false;
-  const loader = new KTX2Loader().setTranscoderPath("basis/").detectSupport(renderer);
+  // The transcoder comes with three: KTX2Loader finds it by import.meta.url, which Vite
+  // resolves in the dev server and copies into the build.
+  const loader = new KTX2Loader().detectSupport(renderer);
   const made: Texture[] = [];
   try {
     const load = async (file: string) => {
@@ -221,16 +242,28 @@ export async function upgradeTextures(set: TextureSet, renderer: WebGLRenderer):
       heroLit: await stack(full.heroes.lit),
       quay: settle(await load(full.quay)),
     };
+    const skies = Object.fromEntries(await Promise.all(Object.entries(full.skies).map(async ([name, file]) => [name, skyTexture(await load(file))] as const)));
+    for (const t of Object.values(skies)) {
+      t.colorSpace = SRGBColorSpace;
+      made.push(t);
+    }
     for (const t of made) renderer.initTexture(t);
     let bytes = 0;
+    const size = (t: Texture) => (t.mipmaps as { data: ArrayBufferView }[]).reduce((a, m) => a + m.data.byteLength, 0);
     for (const k of UPGRADABLE) {
       const old = set[k];
       (set as Record<Upgradable, Texture>)[k] = next[k];
       set.uniforms[k].value = next[k];
       old.dispose();
-      for (const m of next[k].mipmaps as { data: ArrayBufferView }[]) bytes += m.data.byteLength;
+      bytes += size(next[k]);
     }
-    set.status = `KTX2 ${full.layer}², ${FORMAT_NAMES[next.quay.format]}, ${(bytes / 2 ** 20).toFixed(0)} MB`;
+    for (const [name, t] of Object.entries(skies)) {
+      set.skies[name].dispose();
+      set.skies[name] = set.skyUniforms[name].value = t;
+      bytes += size(t);
+    }
+    const sky = Object.values(skies)[0];
+    set.status = `KTX2 ${full.layer}², ${FORMAT_NAMES[next.quay.format]}; skies ${full.sky} × ${full.sky / 2}, ${sky ? FORMAT_NAMES[sky.format] : "none"}; ${(bytes / 2 ** 20).toFixed(0)} MB`;
     return true;
   } catch (err) {
     console.warn("Full-size textures not used; staying on the WebP set.", err);

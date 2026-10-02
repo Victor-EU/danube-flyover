@@ -103,7 +103,7 @@ All geometry comes from open data, processed once by offline scripts into static
 | Boat route and piers | BKK GTFS open data (lines D11, D12, D14) | Open | Optional; pier positions for boat-mode stops |
 | Hero landmark meshes | Modelled in code from reference dimensions, on the OSM footprints and `bridges.json` (`tools/heroes/`) | Own work | `build-heroes`: one meshopt-compressed glb per landmark; their texture layers are painted with the facades |
 | Facade atlases, quays, roofs, hero layers | The OpenAI image API (`gpt-image-2.5-sunburst`, the current set), each repainting its procedural texture (`tools/textures/`) as a layout guide with the style sheet attached, 1024×1024 or the layer's aspect, flat lighting; brought to the procedural level of colour, seams repainted where they show. Procedural alone without a key | API: the output is ours under OpenAI's Services Agreement; credited as AI-generated. Procedural: own work | Packed by `pack-textures.ts`: KTX2/Basis (ETC1S, mipmapped) at the masters' 1024², a file per layer, stacked into array textures at load; and the WebP fallback, 512² layers |
-| Skydome panoramas | Procedural (the current set), or the OpenAI image API: 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | 2048×1024 WebP now; generated ones below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
+| Skydome panoramas | Procedural (the current set), or the OpenAI image API: 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | Masters at 4096×2048: KTX2 (UASTC) at full size, swapped in after the first frame, which draws with 2048×1024 WebP; generated ones below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
 | Music | Four jazz tracks by Kevin MacLeod (incompetech.com): "Bossa Antigua" and "Backbay Lounge" by day, "Smooth Lovin" and "Night in Venice" by night | CC BY 4.0, credit in the About overlay | `npm run audio` (macOS: afconvert): trimmed, levelled to -19.5 LUFS (BS.1770), AAC at 128 kb/s in `public/data/audio/` |
 | Landmark illustrations | Rendered from the scene, one per landmark, at a set viewpoint and hour (`?record=cards`), then repainted by the image API as an illustration in the style sheet's style (the current set; the render fixes the composition) | API output credited as AI-generated; the renders are own work | `npm run cards -- --api`: the repaint (without `--api`, a painted finish on the render), 720×450 WebP, shown in cards |
 
@@ -258,7 +258,7 @@ Target: 60 fps at 1080p on a 2022 integrated-GPU laptop (high tier), 30 fps on a
 | --- | --- | --- |
 | Triangles in view | 1.5 M | City merged into \~12 meshes (by district and material); heroes ≤ 20k each |
 | Draw calls | 150 in the main pass; ≤ 75 each in the shadow and reflection passes | Merge by material; trees instanced; shadow and reflection passes draw a reduced set; at most 4 real point lights, everything else emissive sprites |
-| Texture memory | 256 MB | KTX2/Basis at the masters' 1024² for the facade, roof, quay and hero layers: 27 MB as ETC2. The panoramas stay WebP at their masters' 2048×1024 |
+| Texture memory | 256 MB | KTX2/Basis at the masters' 1024² for the facade, roof, quay and hero layers: 27 MB as ETC2. The panoramas at 4096×2048 as UASTC: 32 MB as ASTC or BC7 |
 | Initial download | 25 MB | Meshopt-compressed, quantised glTF; textures streamed after first frame |
 | Time to first frame | 3 s | On a 50 Mbps connection. The first frame needs only the first-frame set (procedural sky, water, terrain, city), at most 12 MB, about 2 s; progressive loading with a styled loading screen |
 | Shadow map | 2048² high / 1024² medium / off low | One cascade, fitted to a 600 m box around the camera |
@@ -272,7 +272,7 @@ Target: 60 fps at 1080p on a 2022 integrated-GPU laptop (high tier), 30 fps on a
 - OSM attribution must be visible: a persistent credit in the bottom bar, plus the About overlay.
 - Hero models must not reproduce any third-party model or artwork; generated illustrations must not include real signage or text.
 - The whole scene lives in one WebGL context; avoid any library that spins up its own.
-- Everything must degrade. The first frame draws with the WebP set, then the KTX2 set, transcoded to whatever compressed format the GPU takes, replaces it. The WebP stays when the Basis transcoder fails to load or the GPU takes no compressed format. Fallback textures are half resolution (512² layers), because WebP decodes to uncompressed RGBA, four times the memory of the KTX2 set at full size. If WebGL2 is missing, show a static golden-hour render with a message.
+- Everything must degrade. The first frame draws with the WebP set, then the KTX2 set, transcoded to whatever compressed format the GPU takes, replaces it. The WebP stays when the Basis transcoder fails to load or the GPU takes no compressed format. Fallback textures are half resolution (512² layers, 2048×1024 skies), because WebP decodes to uncompressed RGBA, four times the memory of the KTX2 set at full size. If WebGL2 is missing, show a static golden-hour render with a message.
 
 ## Milestones and build order
 

@@ -5,7 +5,7 @@
 
 import type { Pt, Ring } from "../lib/geom";
 import type { HeroContext } from "./context";
-import { ensureCcw, fitV, insetPolygon, Model, ngon, surf, type Surface } from "./kit";
+import { ensureCcw, Facade, fitV, insetPolygon, Model, ngon, surf, type Surface } from "./kit";
 
 // --- Fisherman's Bastion ------------------------------------------------------------------
 
@@ -71,6 +71,9 @@ const CHURCH = surf("lancet", "#ebe5d7");
 const CHURCH_STONE = surf("ashlar", "#e6dfd0");
 const ZSOLNAY = surf("zsolnay", "#ffffff", 0.45);
 const SPIRE = surf("ashlar", "#d9d1c0", 0.9);
+const OPENING = surf("plain", "#2a2622", 0.15);
+/** The rose window's glass, dark from outside by day. */
+const ROSE = surf("plain", "#3b3956", 0.3);
 
 export function matthias(ctx: HeroContext): Model[] {
   const c = ctx.centre("matthias");
@@ -98,8 +101,68 @@ export function matthias(ctx: HeroContext): Model[] {
   m.prism(tx, tz, 4, 0.15, 79, 81, SPIRE, SPIRE);
   // The Béla tower, north-west, under a tiled spire.
   m.box(-13.3, -9.9, 19.2, 23.3, y0, 24, CHURCH_STONE, null);
+  m.box(-13.6, -9.6, 18.9, 23.6, 23.3, 24, CHURCH_STONE);
   m.pyramid(-11.6, 21.25, 8, 2.6, 24, 8, ZSOLNAY, Math.PI / 8);
+  // Detail: buttresses with pinnacles, the west portal under a rose window, the south porch
+  // (the Mary portal), the Matthias tower's corner buttresses and the crockets up its spire.
+  const ground = (x: number, z: number) => {
+    const p = m.world([x, 0, z]);
+    return ctx.ground(p[0], p[2]) - g;
+  };
+  // Along the nave at the lancet layer's bay lines, clear of the tower and the porch.
+  const bayLen = (hz1 - hz0) / Math.round(((hz1 - hz0) * 2) / 9);
+  for (let z = hz0 + bayLen; z < hz1 - 1; z += bayLen) {
+    buttress(m, hx0, z, -1, y0);
+    if (z < tz - 5.5 || z > tz + 5.5) buttress(m, hx1, z, 1, y0);
+  }
+  apseButtresses(m, 6.15, -26.4, 9.5, y0);
+  const west = new Facade([hx1, hz1], [hx0, hz1]);
+  const gw = ground((hx0 + hx1) / 2, hz1);
+  m.portal(west, hx1 - (hx0 + hx1) / 2, 3.4, gw - 0.3, gw + 4.2, OPENING, CHURCH_STONE, { band: 0.6, proud: 0.45 });
+  m.rose(west, hx1 - (hx0 + hx1) / 2, gw + 11.2, 2.7, ROSE, CHURCH_STONE, { band: 0.5, proud: 0.35 });
+  porch(m, hx1, -0.6, bayLen - 1.2, ground(hx1 + 2, -0.6));
+  for (const [px, pz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) m.orientedBox(tx + px * 5, tz + pz * 5, 1.2, 2.2, Math.atan2(px, pz), y0, 30, CHURCH_STONE);
+  m.prism(tx, tz, 8, 3.75, 58.6, 59.4, CHURCH_STONE, CHURCH_STONE, Math.PI / 8);
+  for (const t of [0.2, 0.4, 0.6])
+    for (const [px, pz] of ngon(tx, tz, 8, 3.5 * (1 - t) + 0.12, Math.PI / 8)) m.pyramid(px, pz, 4, 0.28, 59 + 20 * t, 0.9, SPIRE, Math.PI / 4);
+  // Finials on the great roof's gables.
+  for (const z of [hz0, hz1]) {
+    m.prism((hx0 + hx1) / 2, z, 4, 0.25, 36, 37.4, CHURCH_STONE, null, Math.PI / 4);
+    m.pyramid((hx0 + hx1) / 2, z, 4, 0.45, 37.4, 1.4, SPIRE, Math.PI / 4);
+  }
   return [m];
+}
+
+/** A buttress out of the wall at x (facing `side`, ±1 in x), stepped back half way up, with a pinnacle over the eaves. */
+function buttress(m: Model, x: number, z: number, side: number, y0: number): void {
+  const out = (d: number) => [x, x + side * d].sort((a, b) => a - b) as [number, number];
+  m.box(...out(1.7), z - 0.6, z + 0.6, y0, 12.5, CHURCH_STONE);
+  m.box(...out(1.1), z - 0.5, z + 0.5, 12.5, 15.6, CHURCH_STONE);
+  m.pyramid(x + side * 0.55, z, 4, 0.62, 15.6, 3.4, SPIRE, Math.PI / 4);
+}
+
+/** Buttresses round the apse (as `apse` draws it), radiating from its corners. */
+function apseButtresses(m: Model, cx: number, cz: number, r: number, y0: number): void {
+  for (let i = 1; i < 4; i++) {
+    const a = Math.PI + (i / 4) * Math.PI;
+    const [px, pz] = [cx + Math.cos(a) * r, cz + Math.sin(a) * r * 0.62];
+    const l = Math.hypot(px - cx, pz - cz);
+    const [ux, uz] = [(px - cx) / l, (pz - cz) / l];
+    const rot = Math.atan2(ux, uz);
+    m.orientedBox(px + ux * 0.8, pz + uz * 0.8, 1.1, 1.8, rot, y0, 11.5, CHURCH_STONE);
+    m.orientedBox(px + ux * 0.5, pz + uz * 0.5, 0.9, 1.1, rot, 11.5, 14.6, CHURCH_STONE);
+    m.pyramid(px + ux * 0.5, pz + uz * 0.5, 4, 0.55, 14.6, 3.2, SPIRE, Math.PI / 4);
+  }
+}
+
+/** The south porch over the Mary portal: a gabled stone porch 2.8 m deep out of the wall at x, centred at z. */
+function porch(m: Model, x: number, z: number, w: number, g: number): void {
+  const [z0, z1] = [z - w / 2, z + w / 2];
+  const x1 = x + 2.8;
+  m.box(x, x1, z0, z1, g - 3, g + 7, CHURCH_STONE, null);
+  m.gable(x - 0.2, x1 + 0.3, z0 - 0.2, z1 + 0.2, g + 7, 3.2, ZSOLNAY, CHURCH_STONE, true, 0.25);
+  m.portal(new Facade([x1, z0], [x1, z1]), w / 2, 2.1, g - 0.3, g + 2.9, OPENING, SPIRE, { band: 0.35, proud: 0.25 });
+  m.pyramid(x1 + 0.3, z, 4, 0.4, g + 10.2, 1.6, SPIRE, Math.PI / 4);
 }
 
 /** A half-octagon apse at the end of a chancel (open toward +z), with a half-pyramid roof. */
@@ -203,9 +266,6 @@ function portico(m: Model, xf: number, z0: number, z1: number, base: number, H: 
     m.box(x - 1, x + 1, z - 1, z + 1, base, base + 0.8, PALACE_TRIM);
     m.prism(x, z, 8, 0.85, base + 0.8, H - 2.6, PALACE_TRIM, null, Math.PI / 8, 0.75);
     m.box(x - 1, x + 1, z - 1, z + 1, H - 2.6, H - 1.8, PALACE_TRIM);
-    // The statue: a figure on its plinth, against the sky.
-    m.box(x - 0.6, x + 0.6, z - 0.6, z + 0.6, H + 2.4, H + 3, PALACE_TRIM);
-    m.prism(x, z, 6, 0.45, H + 3, H + 4.8, PALACE_TRIM, null, 0, 0.32);
-    m.prism(x, z, 6, 0.24, H + 4.8, H + 5.3, PALACE_TRIM, PALACE_TRIM);
+    m.statue(x, z, H + 2.4, 2.9, PALACE_TRIM);
   }
 }

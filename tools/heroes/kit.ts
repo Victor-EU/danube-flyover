@@ -514,6 +514,127 @@ export class Model {
     }
   }
 
+  /**
+   * An arched portal (or window) on a facade, standing `proud` out of the wall: the opening,
+   * a convex face just off the wall in `opening`'s surface (dark for a doorway, glass for a
+   * window), its reveals, and a band `band` wide round it. It is w wide, centred s along the
+   * wall, from y0, its semicircular arch springing at y1.
+   */
+  portal(f: Facade, s: number, w: number, y0: number, y1: number, opening: Surface, frame: Surface, { band = 0.5, proud = 0.3, n = 8 } = {}): void {
+    const r = w / 2;
+    // Each outline runs from the foot of one jamb, over the arch, to the foot of the other.
+    const outline = (rad: number): UV[] => {
+      const pts: UV[] = [[s - rad, y0], [s - rad, y1]];
+      for (let k = 1; k < n; k++) pts.push([s - Math.cos((k / n) * Math.PI) * rad, y1 + Math.sin((k / n) * Math.PI) * rad]);
+      pts.push([s + rad, y1], [s + rad, y0]);
+      return pts;
+    };
+    const inner = outline(r);
+    const outer = outline(r + band);
+    const P = (p: UV, d: number) => f.at(p[0], p[1], d);
+    /** Facade (s, y) direction to the local frame. */
+    const dir = (ds: number, dy: number): V3 => [f.u[0] * ds, dy, f.u[1] * ds];
+    const lo = layerOf(opening);
+    this.faceToward(inner.map((p) => P(p, 0.04)), inner.map(([x, y]) => [(x - s + r) / lo.tile[0], (y - y0) / lo.tile[1]]), opening, f.toward);
+    const l = layerOf(frame);
+    let run = 0;
+    for (let k = 0; k < inner.length - 1; k++) {
+      const [p, q, P2, Q2] = [inner[k], inner[k + 1], outer[k], outer[k + 1]];
+      const seg = Math.hypot(q[0] - p[0], q[1] - p[1]) / l.tile[0];
+      const [u0, u1] = [run, run + seg];
+      run = u1;
+      const mid: UV = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      // Toward the opening's axis (the jambs) or the arch's centre.
+      const axis = dir(s - mid[0], Math.min(y1, mid[1]) - mid[1]);
+      const dv = proud / l.tile[1];
+      const bv = band / l.tile[1];
+      this.faceToward([P(p, 0.04), P(q, 0.04), P(q, proud), P(p, proud)], [[u0, 0], [u1, 0], [u1, dv], [u0, dv]], frame, axis);
+      this.faceToward([P(p, proud), P(q, proud), P(Q2, proud), P(P2, proud)], [[u0, 0], [u1, 0], [u1, bv], [u0, bv]], frame, f.toward);
+      this.faceToward([P(P2, 0), P(Q2, 0), P(Q2, proud), P(P2, proud)], [[u0, 0], [u1, 0], [u1, dv], [u0, dv]], frame, [-axis[0], -axis[1], -axis[2]]);
+    }
+  }
+
+  /** A round window on a facade, r across, centred at (s, y): glass, its reveal, and a band round it standing `proud`. */
+  rose(f: Facade, s: number, y: number, r: number, glass: Surface, frame: Surface, { band = 0.45, proud = 0.3, n = 16 } = {}): void {
+    const ring = (rad: number): UV[] => Array.from({ length: n }, (_, k) => [s + Math.cos((k / n) * Math.PI * 2) * rad, y + Math.sin((k / n) * Math.PI * 2) * rad]);
+    const inner = ring(r);
+    const outer = ring(r + band);
+    const P = (p: UV, d: number) => f.at(p[0], p[1], d);
+    const lg = layerOf(glass);
+    this.faceToward(inner.map((p) => P(p, 0.04)), inner.map(([x, yy]) => [(x - s + r) / lg.tile[0], (yy - y + r) / lg.tile[1]]), glass, f.toward);
+    const l = layerOf(frame);
+    const seg = (2 * Math.PI * r) / n / l.tile[0];
+    const [dv, bv] = [proud / l.tile[1], band / l.tile[1]];
+    for (let k = 0; k < n; k++) {
+      const j = (k + 1) % n;
+      const mid: UV = [(inner[k][0] + inner[j][0]) / 2, (inner[k][1] + inner[j][1]) / 2];
+      const axis: V3 = [f.u[0] * (s - mid[0]), y - mid[1], f.u[1] * (s - mid[0])];
+      const uv: UV[] = [[0, 0], [seg, 0], [seg, dv], [0, dv]];
+      this.faceToward([P(inner[k], 0.04), P(inner[j], 0.04), P(inner[j], proud), P(inner[k], proud)], uv, frame, axis);
+      this.faceToward([P(inner[k], proud), P(inner[j], proud), P(outer[j], proud), P(outer[k], proud)], [[0, 0], [seg, 0], [seg, bv], [0, bv]], frame, f.toward);
+      this.faceToward([P(outer[k], 0), P(outer[j], 0), P(outer[j], proud), P(outer[k], proud)], uv, frame, [-axis[0], -axis[1], -axis[2]]);
+    }
+  }
+
+  /** A statue h tall on its plinth at (x, z), standing at y: a figure against the sky. */
+  statue(x: number, z: number, y: number, h: number, s: Surface): void {
+    const k = h / 2.9;
+    this.box(x - 0.6 * k, x + 0.6 * k, z - 0.6 * k, z + 0.6 * k, y, y + 0.6 * k, s);
+    this.prism(x, z, 6, 0.45 * k, y + 0.6 * k, y + 2.4 * k, s, null, 0, 0.32 * k);
+    this.prism(x, z, 6, 0.24 * k, y + 2.4 * k, y + h, s, s);
+  }
+
+  /**
+   * A band round a building, h tall, standing `proud` out of its walls at y, with a ledge on
+   * top (string courses, plinths, cornices). Skipped where the offset would fold over.
+   */
+  band(poly: Polygon, y: number, h: number, proud: number, s: Surface): void {
+    const out = insetPolygon(poly, -proud);
+    if (!out) return;
+    this.walls(out, y, y + h, s);
+    const l = layerOf(s);
+    poly.forEach((ring, k) => {
+      for (let i = 0; i < ring.length; i++) {
+        const j = (i + 1) % ring.length;
+        const len = Math.hypot(ring[j][0] - ring[i][0], ring[j][1] - ring[i][1]) / l.tile[0];
+        const [a, b, c, d] = [ring[i], ring[j], out[k][j], out[k][i]];
+        this.faceToward([[a[0], y + h, a[1]], [b[0], y + h, b[1]], [c[0], y + h, c[1]], [d[0], y + h, d[1]]], [[0, 0], [len, 0], [len, proud / l.tile[1]], [0, proud / l.tile[1]]], s, [0, 1, 0]);
+      }
+    });
+  }
+
+  /** A parapet round a ring (outer counter-clockwise), h tall and t thick, standing on y. */
+  parapet(ring: Ring, y: number, h: number, t: number, s: Surface): void {
+    const inner = insetPolygon([ring], t);
+    this.walls(ring, y, y + h, s);
+    if (!inner) return;
+    this.walls([...inner[0]].reverse(), y, y + h, s);
+    this.band([inner[0]], y + h - 0.01, 0.01, t, s);
+  }
+
+  /**
+   * A dormer on a roof slope behind a facade: its window wall `front` metres in from the
+   * facade, w wide at s along it, from y to y + h, running `back` metres into the roof under
+   * a small gable.
+   */
+  dormer(f: Facade, s: number, w: number, y: number, h: number, front: number, back: number, wall: Surface, roof: Surface): void {
+    const [s0, s1] = [s - w / 2, s + w / 2];
+    const [d0, d1] = [-front, -front - back];
+    const rise = w * 0.45;
+    const P = (ss: number, yy: number, d: number) => f.at(ss, yy, d);
+    const lw = layerOf(wall);
+    const U = fitU(wall, w);
+    this.faceToward([P(s0, y, d0), P(s1, y, d0), P(s1, y + h, d0), P(s0, y + h, d0)], [[U, 0], [0, 0], [0, fitV(wall, h)], [U, fitV(wall, h)]], wall, f.toward);
+    this.faceToward([P(s0, y + h, d0), P(s1, y + h, d0), P(s, y + h + rise, d0)], [[0, 0], [w / lw.tile[0], 0], [w / 2 / lw.tile[0], rise / lw.tile[1]]], roof, f.toward);
+    for (const [e, sign] of [[s0, -1], [s1, 1]] as const) {
+      const side: V3 = [f.u[0] * sign, 0, f.u[1] * sign];
+      this.faceToward([P(e, y, d0), P(e, y, d1), P(e, y + h, d1), P(e, y + h, d0)], [[0, 0], [back / lw.tile[0], 0], [back / lw.tile[0], h / lw.tile[1]], [0, h / lw.tile[1]]], wall, side);
+      const lr = layerOf(roof);
+      const slant = Math.hypot(w / 2, rise) / lr.tile[1];
+      this.faceToward([P(e, y + h, d0), P(e, y + h, d1), P(s, y + h + rise, d1), P(s, y + h + rise, d0)], [[0, 0], [back / lr.tile[0], 0], [back / lr.tile[0], slant], [0, slant]], roof, [side[0] * rise, w / 2, side[2] * rise]);
+    }
+  }
+
   /** World-space triangles, for the floor grid. */
   worldTriangles(): Float32Array {
     const out = new Float32Array(this.idx.length * 3);
@@ -569,6 +690,50 @@ function sections(path: V3[], radii: (k: number) => [number, number], n: number)
     rings.push(ring);
   }
   return rings;
+}
+
+/**
+ * A vertical plane along a wall from a to b (local x, z), facing out of the solid like `wall`,
+ * for the features set on a facade: s runs along it from a, d out from it, y up.
+ */
+export class Facade {
+  readonly len: number;
+  readonly u: Pt;
+  readonly out: Pt;
+
+  constructor(
+    readonly a: Pt,
+    readonly b: Pt,
+  ) {
+    this.len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    this.u = [(b[0] - a[0]) / this.len, (b[1] - a[1]) / this.len];
+    this.out = [this.u[1], -this.u[0]];
+  }
+
+  /** The point s along the wall and d out from it. */
+  pt(s: number, d = 0): Pt {
+    return [this.a[0] + this.u[0] * s + this.out[0] * d, this.a[1] + this.u[1] * s + this.out[1] * d];
+  }
+
+  at(s: number, y: number, d = 0): V3 {
+    const p = this.pt(s, d);
+    return [p[0], y, p[1]];
+  }
+
+  /** The ring (counter-clockwise) of a block from s0 to s1 along the wall and d0 to d1 out. */
+  block(s0: number, s1: number, d0: number, d1: number): Ring {
+    return ensureCcw([this.pt(s0, d0), this.pt(s1, d0), this.pt(s1, d1), this.pt(s0, d1)]);
+  }
+
+  /** The same front moved d out (s measured the same way). */
+  offset(d: number): Facade {
+    return new Facade(this.pt(0, d), this.pt(this.len, d));
+  }
+
+  /** Outward, for faceToward. */
+  get toward(): V3 {
+    return [this.out[0], 0, this.out[1]];
+  }
 }
 
 export function ngon(cx: number, cz: number, n: number, r: number, rot0 = 0): Pt[] {

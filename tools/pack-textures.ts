@@ -9,17 +9,18 @@
 //   full/<set>_<layer>.ktx2  every layer of the four strips above and the quay at its
 //                      master's size (1024²), as KTX2 (ETC1S, mipmapped; tools/lib/ktx2.ts),
 //                      which the app swaps in after the first frame
+//   full/sky_<name>.ktx2  the skies at their masters' 4096 × 2048, as UASTC (ETC1S bands
+//                      their gradients), without mipmaps like their WebP
 //   textures.json      the manifest the loader reads
 // The WebP files are the design's fallback sizes (512² surfaces, 2048 × 1024 skies): the first
-// frame's set, and what stays when the GPU takes no compressed format. The skies and the
-// water's normal map have no KTX2: their masters are no bigger than their WebP, and ETC1S
-// bands smooth gradients.
+// frame's set, and what stays when the GPU takes no compressed format. The water's normal map
+// has no KTX2: its master is no bigger than its WebP.
 // Usage: npm run pack-textures
 
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import sharp, { type Sharp } from "sharp";
 import { HERO_LAYERS, TEXTURES } from "../src/config";
-import { encodeKtx2 } from "./lib/ktx2";
+import { encodeKtx2, type Ktx2Options } from "./lib/ktx2";
 import { HERO_ROUGHNESS } from "./textures/heroes";
 
 const RAW = new URL("../assets/raw/", import.meta.url);
@@ -58,10 +59,10 @@ await write("quay.webp", sharp(raw("quay_stone.png")).resize(LAYER, LAYER), 86);
 await write("water_normal.webp", sharp(raw("water_normal.png")), 94);
 for (const sky of TEXTURES.skies) await write(`sky_${sky}.webp`, sharp(raw(`sky_${sky}.png`)).resize(2048, 1024), 86);
 
-// The full-size set, a file per layer (about 3 s each).
+// The full-size set, a file per layer (about 3 s each, a sky about 40 s).
 const fullBytes: Record<string, number> = {};
-const ktx2 = async (file: string, master: string) => {
-  const buf = await encodeKtx2(raw(master));
+const ktx2 = async (file: string, master: string, opts?: Ktx2Options) => {
+  const buf = await encodeKtx2(raw(master), opts);
   writeFileSync(new URL(file, OUT), buf);
   fullBytes[file] = buf.length;
   return file;
@@ -76,8 +77,11 @@ const full = {
   surfaces: { day: await fullSet("surfaces", sets.surfacesDay), lit: await fullSet("surfaces", sets.surfacesLit) },
   heroes: { day: await fullSet("heroes", sets.heroesDay), lit: await fullSet("heroes", sets.heroesLit) },
   quay: await ktx2("full/quay.ktx2", "quay_stone.png"),
+  sky: (await sharp(raw(`sky_${TEXTURES.skies[0]}.png`)).metadata()).width,
+  skies: {} as Record<string, string>,
   bytes: fullBytes,
 };
+for (const sky of TEXTURES.skies) full.skies[sky] = await ktx2(`full/sky_${sky}.ktx2`, `sky_${sky}.png`, { uastc: true, mipmaps: false });
 
 const manifest = {
   note: "Packed by tools/pack-textures.ts from assets/raw/ (tools/gen-textures.ts). Layer order follows TEXTURES in src/config.ts.",
@@ -102,4 +106,4 @@ const total = Object.values(sizes).reduce((a, b) => a + b, 0);
 for (const [k, v] of Object.entries(sizes)) console.log(`  ${k.padEnd(22)} ${(v / 1024).toFixed(0).padStart(5)} KB`);
 console.log(`public/data/tex: ${(total / 1024).toFixed(0)} KB in ${Object.keys(sizes).length} files (+ textures.json ${statSync(new URL("textures.json", OUT)).size} B)`);
 const fullTotal = Object.values(fullBytes).reduce((a, b) => a + b, 0);
-console.log(`public/data/tex/full: ${(fullTotal / 1024).toFixed(0)} KB in ${Object.keys(fullBytes).length} KTX2 files at ${full.layer}²`);
+console.log(`public/data/tex/full: ${(fullTotal / 1024).toFixed(0)} KB in ${Object.keys(fullBytes).length} KTX2 files, the layers at ${full.layer}², the skies ${full.sky} wide`);

@@ -82,7 +82,7 @@ npm run build-world  # 2-8. everything below, in order (about 15 s, deterministi
 | 6 | `build-city.ts` | `city.glb`: buildings merged per district, and ponds; `trees.json` |
 | 7 | `build-floor.ts` | `floor.bin`: the glider's 5 m altitude-floor grid |
 | 8 | `build-life.ts` | `life.json`: the tram lines along both embankments |
-| 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface and hero array textures, quay, water normal map and skies as WebP, and `tex/full/`, the layers and quay at full size as KTX2 (about 2 minutes to encode); and `docs/style-sheet.webp` |
+| 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface and hero array textures, quay, water normal map and skies as WebP, and `tex/full/`, the layers and quay at full size and the skies at 4096 × 2048 as KTX2 (about 3 minutes to encode); and `docs/style-sheet.webp` |
 
 `gen-textures` is procedural by default, offline and deterministic. The committed set is the image-API one, below. A plain `npm run textures` replaces it with the procedural set.
 
@@ -129,12 +129,12 @@ The music isn't part of `build-world`. To change it, download the originals into
   - `tools/osm/` and `tools/dem/` hold the committed source extracts.
   - `tools/textures/` paints the texture set; `tools/prompts/` holds the image-API prompts.
   - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers (`imageApi.ts`: the client, its cache and costs); `tools/textures/api.ts` plans the API texture set and fixes its seams.
-  - `tools/lib/ktx2.ts` encodes the full-size textures (Basis Universal ETC1S, through `ktx2-encoder`'s WebAssembly build).
-  - `tools/capturePlugin.ts` is the dev server's frame capture endpoint, and `tools/basisPlugin.ts` serves three's Basis transcoder at `basis/` (and copies it into the build), for the KTX2 textures.
+  - `tools/lib/ktx2.ts` encodes the full-size textures (Basis Universal: ETC1S for the layers, UASTC for the skies, through `ktx2-encoder`'s WebAssembly build).
+  - `tools/capturePlugin.ts` is the dev server's frame capture endpoint.
 
 ## Credits
 
 - Map data © OpenStreetMap contributors, ODbL 1.0. The extracts in `tools/osm/` and the files derived from them in `public/data/` are ODbL databases (see `tools/osm/README.md`).
 - Terrain contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.
 - Music: "Bossa Antigua", "Backbay Lounge", "Smooth Lovin" and "Night in Venice", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). Trimmed, levelled and re-encoded for the web.
-- Software: three.js (MIT), with the Basis Universal transcoder it ships (Apache 2.0, Binomial LLC), which the build copies to `basis/`.
+- Software: three.js (MIT), with the Basis Universal transcoder it ships (Apache 2.0, Binomial LLC), which the build copies to `assets/`.
