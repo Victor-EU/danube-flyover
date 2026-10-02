@@ -179,7 +179,18 @@ export function imageClient(argv = process.argv): ImageClient {
  * assets/raw/api/style_sheet-*.png, or change its prompt, to make a new one). Null in a dry run.
  */
 export function styleSheet(api: ImageClient): Promise<Buffer | null> {
-  return api.image({ name: "style_sheet", prompt: `${prompt("common")}\n\n${prompt("style-sheet")}`, size: "1536x1024" });
+  return api.image({ name: "style_sheet", prompt: `${texturePreamble()}\n\n${prompt("style-sheet")}`, size: "1536x1024" });
+}
+
+/**
+ * What the style sheet and every texture request open with: the style (common.txt) and the
+ * surfaces' rules (surface.txt). The cards take the style alone: the rules' "no sky colour, no
+ * time of day" had the API paint plain paper where a card's sky was.
+ */
+export function texturePreamble(): string {
+  // One newline: the two were one file when the set was made, and the cached answers' keys
+  // depend on the exact text.
+  return `${prompt("common")}\n${prompt("surface")}`;
 }
 
 /** A prompt from tools/prompts/<name>.txt, with {placeholders} filled in. */

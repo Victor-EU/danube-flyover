@@ -4,7 +4,7 @@ Changes to the design doc and departures from it, with the reason. Newest first.
 
 ## 2026-10-02 — The image-API set
 
-The committed textures and card illustrations now come from OpenAI's image API, `gpt-image-2.5-sunburst` at "high", using your key. The set is 71 answers. With the trials and redos below, 116 were paid for: $7.68 of the $20 budget, $6.65 for the textures and $1.03 for the cards. The procedural set is still the default for a run without a key. The site credits the API set as AI-generated (About, under Images).
+The committed textures and card illustrations now come from OpenAI's image API, `gpt-image-2.5-sunburst` at "high", using your key. The set is 71 answers. With the trials and redos below, 126 were paid for: $8.28 of the $20 budget, $6.65 for the textures and $1.63 for the cards. The procedural set is still the default for a run without a key. The site credits the API set as AI-generated (About, under Images).
 
 - **What was made:** the style sheet, eight facades with lit twins, four roofs, the quay, thirteen hero layers (six with lit twins) and seventeen card illustrations.
 - **Layout guides.** The model doesn't keep to a grid it's only told about.
@@ -22,9 +22,10 @@ The committed textures and card illustrations now come from OpenAI's image API, 
   - Answers are cached by a hash of the whole request, so a changed prompt or guide asks again instead of reusing a stale answer.
   - `spent.json` totals every answer across runs, and `--budget` stops a run before a request could go over.
   - Measured costs: $0.04 for the style sheet, which sends no images; $0.054–0.075 for an answer with reference images; $0.06 for a card. The dry-run estimate was about 30% high.
-  - The cache, `assets/raw/api/` (177 MB), isn't committed. Keep a copy: without it, a rerun pays again and paints different images. The app only needs `public/data/`.
+  - The cache, `assets/raw/api/` (245 MB), isn't committed. Keep a copy: without it, a rerun pays again and paints different images. The app only needs `public/data/`.
 - **Cards:** the renders were recorded again with the new textures before the repaint, so each illustration starts from what the flyover now shows. The repaint keeps the render's viewpoint and composition, and paints in the detail, autumn trees and light.
-- **Size:** detail compresses less. `public/data/tex/` grew from 0.66 MB to 1.85 MB, and the cards from 0.27 MB to 1.18 MB. The cards load as each one comes in. Without them and the music, the first-frame set is 9.6 MB, inside the 12 MB.
+  - **Skies.** The first run opened each card's prompt with the textures' rules, "no sky colour, no time of day", and 10 of the 17 came back with plain cream paper for a sky. Those rules now live in `surface.txt`, which only the textures and the style sheet get, with their text unchanged, so their cached answers still match. The 10 were asked again with the style alone and `card_sky.txt` ($0.60), and all kept their render's sky. The other 7 kept theirs the first time; they keep the first run's prompt (`FIRST_RUN` in `tools/cards.ts`), so their answers stay in the cache.
+- **Size:** detail compresses less. `public/data/tex/` grew from 0.66 MB to 1.85 MB, and the cards from 0.27 MB to 1.08 MB. The cards load as each one comes in. Without them and the music, the first-frame set is 9.6 MB, inside the 12 MB.
 
 ## 2026-10-02 — Glider, autumn, text cards and the image API
 

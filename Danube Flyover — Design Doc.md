@@ -125,7 +125,7 @@ The autopilot spline and its beat keyframes are built at load from the hand-edit
 **Texture generation rules**
 
 - Generate a single style-sheet image first (a riverside street in the target style, flat midday light). Attach it to every later prompt.
-- All surface textures are lighting-neutral: flat, even light, no shadows, no sky colour, no time of day in the prompt.
+- All surface textures are lighting-neutral: flat, even light, no shadows, no sky colour, no time of day in the prompt. Card illustrations get the style without these rules, and keep their render's sky and hour (with the rules, they came back with plain paper for a sky).
 - Facades come in pairs: `facade_X_day.png` and `facade_X_lit.png` (same facade, windows glowing). The lit one is stored as the emissive layer, black wherever nothing glows (an API-generated night version has the day one subtracted). The runtime crossfades it window by window.
 - A facade is one tile of exactly 4 bays by 4 storeys (3.4 m each), one window per bay and storey: the bottom row is the ground floor, and the three rows above must repeat when stacked. The model doesn't keep to a grid it's only told about, so every texture repaints its procedural twin, drawn to the grid, as a layout guide (without one, a surface can come back as the style sheet's whole scene).
 - Facades, roofs and hero layers are near-white detail; the runtime tints them with each building's or face's colour. The model paints in colour, so each texture is scaled channel by channel to its procedural twin's level.

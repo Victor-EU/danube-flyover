@@ -13,12 +13,19 @@ import sharp from "sharp";
 import { CARD_VIEWS } from "../src/cardViews";
 import { sunPosition } from "../src/sun";
 import type { LandmarksJson } from "../src/world/landmarks";
-import { imageClient, prompt, styleSheet } from "./lib/imageApi";
+import { imageClient, prompt, styleSheet, texturePreamble } from "./lib/imageApi";
 
 const IN = new URL("./out/captures/", import.meta.url);
 const OUT = new URL("../public/data/cards/", import.meta.url);
 mkdirSync(OUT, { recursive: true });
 const [W, H] = [720, 450];
+/**
+ * The first run sent the textures' rules with each card ("no sky colour, no time of day"), and
+ * 10 of the 17 came back with plain paper for a sky; those were asked again with the style
+ * alone and card_sky.txt. These 7 kept their sky, and the first run's prompt, so their answers
+ * stay in the cache. Take one out to ask it again the current way.
+ */
+const FIRST_RUN = new Set(["chainBridge", "japaneseGarden", "libertyBridge", "libertyStatue", "palace", "parliament", "vigado"]);
 
 const vignette = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><radialGradient id="v" cx="0.5" cy="0.48" r="0.75"><stop offset="0.55" stop-color="#fff"/><stop offset="1" stop-color="#b9ad98"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#v)"/></svg>`,
@@ -42,8 +49,10 @@ for (const f of files) {
     const l = landmarks.find((x) => x.id === id);
     if (!l) throw new Error(`card_${id}.png: no landmark ${id}`);
     const render = await sharp(new URL(f, IN).pathname).png().toBuffer();
-    const text = prompt("card", { name: l.name, when: hour(CARD_VIEWS[id]?.[3] ?? 18), text: l.text ?? l.note });
-    const painted = await api.image({ name: `card_${id}`, prompt: `${prompt("common")}\n\n${text}`, size: "1536x1024", refs: sheet ? [render, sheet] : [render] });
+    const when = hour(CARD_VIEWS[id]?.[3] ?? 18);
+    const text = prompt("card", { name: l.name, when, text: l.text ?? l.note });
+    const ask = FIRST_RUN.has(id) ? `${texturePreamble()}\n\n${text}` : `${prompt("common")}\n\n${text}\n\n${prompt("card_sky", { when })}`;
+    const painted = await api.image({ name: `card_${id}`, prompt: ask, size: "1536x1024", refs: sheet ? [render, sheet] : [render] });
     if (!painted) continue;
     // 3:2 from the API to the card's 16:10: trim the top and bottom.
     await sharp(painted).resize(W, H, { fit: "cover", kernel: "lanczos3" }).webp({ quality: 80, effort: 6 }).toFile(out);

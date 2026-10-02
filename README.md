@@ -100,12 +100,12 @@ npm run cards -- --api --budget 20
 
 How a run works:
 
-- **Cache:** every answer is kept in `assets/raw/api/<name>-<key>.png`, keyed by a hash of everything sent. A rerun only asks for what's missing or changed, and `--force` asks again. Keep a copy of that folder: it isn't committed (177 MB), and without it a rerun pays again and paints different images.
+- **Cache:** every answer is kept in `assets/raw/api/<name>-<key>.png`, keyed by a hash of everything sent. A rerun only asks for what's missing or changed, and `--force` asks again. Keep a copy of that folder: it isn't committed (245 MB), and without it a rerun pays again and paints different images.
 - **Budget:** `spent.json` there totals what every answer cost, across runs and tools. `--budget <usd>` (or `OPENAI_IMAGE_BUDGET`) stops a run before a request could take the total over.
 - **Seams:** a seam is repaired only where it stands out, and a repair that strays from the surface is asked once more. Check `assets/raw/check/` (each texture tiled 2 × 2) before packing.
 - **Options:** `--only <name>` limits a run, and `OPENAI_IMAGE_QUALITY=low` makes a cheap trial pass.
 
-The committed set is 71 answers. With the trials and redos, making it cost $7.68.
+The committed set is 71 answers. With the trials and redos, making it cost $8.28.
 
 `landmarks.json`, `route.json`, `quality.json` and `audio.json` are hand-edited and never generated (`npm run audio` fills in each track's `gain` and `seconds`).
 

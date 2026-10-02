@@ -22,14 +22,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import sharp from "sharp";
 import { HERO_LAYERS, TEXTURES } from "../../src/config";
-import { type ImageClient, type ImageSize, prompt, sizeFor, styleSheet } from "../lib/imageApi";
+import { type ImageClient, type ImageSize, prompt, sizeFor, styleSheet, texturePreamble } from "../lib/imageApi";
 import { facadeSvg } from "./facades";
 import { heroSvg } from "./heroes";
 import { quaySvg, roofSvg } from "./surfaces";
 import { rasterise } from "./svg";
 
 export async function generateWithApi(api: ImageClient, rawDir: URL, want: (name: string) => boolean): Promise<string[]> {
-  const common = prompt("common");
+  const common = texturePreamble();
   const check = new URL("check/", rawDir);
   mkdirSync(check, { recursive: true });
   const written: string[] = [];
@@ -164,7 +164,7 @@ const SEAM = { band: 0.1, feather: 0.025 };
  * axes whose seam stands out are fixed. Dry (no image), it only lists the request.
  */
 async function tileable(api: ImageClient, name: string, png: Buffer | null, size: ImageSize, sx: boolean, sy: boolean): Promise<Buffer | null> {
-  const req = { name: `${name}_seam`, prompt: `${prompt("common")}\n\n${prompt("seam")}`, size };
+  const req = { name: `${name}_seam`, prompt: `${texturePreamble()}\n\n${prompt("seam")}`, size };
   if (!png) {
     await api.image(req);
     return null;

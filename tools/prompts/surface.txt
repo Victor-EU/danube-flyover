@@ -1,0 +1,1 @@
+Surface textures are lighting-neutral: flat, even light, no cast shadows, no sky colour, no time of day, no perspective (an orthographic, straight-on view). Seamlessly tileable left to right and top to bottom.
