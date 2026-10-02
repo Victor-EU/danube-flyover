@@ -22,10 +22,11 @@ const [W, H] = [720, 450];
 /**
  * The first run sent the textures' rules with each card ("no sky colour, no time of day"), and
  * 10 of the 17 came back with plain paper for a sky; those were asked again with the style
- * alone and card_sky.txt. These 7 kept their sky, and the first run's prompt, so their answers
- * stay in the cache. Take one out to ask it again the current way.
+ * alone and card_sky.txt, as were the palace and the Chain Bridge when their models changed.
+ * These 5 kept their sky, and the first run's prompt, so their answers stay in the cache. Take
+ * one out to ask it again the current way.
  */
-const FIRST_RUN = new Set(["chainBridge", "japaneseGarden", "libertyBridge", "libertyStatue", "palace", "parliament", "vigado"]);
+const FIRST_RUN = new Set(["japaneseGarden", "libertyBridge", "libertyStatue", "parliament", "vigado"]);
 
 const vignette = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><radialGradient id="v" cx="0.5" cy="0.48" r="0.75"><stop offset="0.55" stop-color="#fff"/><stop offset="1" stop-color="#b9ad98"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#v)"/></svg>`,

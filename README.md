@@ -29,7 +29,8 @@ npm run build      # static site in dist/, deployable to any static host
 npm run timetable  # beat start times computed from public/data/route.json
 npm run simulate   # headless runs: the tour through the loop (beats, camera, cards, tracking, floor contacts),
                    # scripted checks of pause, hand-back and the jumps, the lighting at the money shots,
-                   # the heroes, cards, quality tiers and tram lines, and the music's licences and playlist
+                   # the heroes, cards, quality tiers and tram lines, the music's licences and playlist,
+                   # and the download budgets
 npm run textures   # repaint the texture set and the style sheet, and pack public/data/tex/
 npm run cards      # finish the card illustrations (after ?record=cards, below)
 npm run audio      # trim, level and encode the music into public/data/audio/ (macOS; originals in tools/out/audio/)
@@ -37,7 +38,7 @@ npm run audio      # trim, level and encode the music into public/data/audio/ (m
 
 To record the run, open the dev server with `?record=timelapse` (the whole tour in 30 s) or `?record=beat6` (30 s of a beat in real time), wait for the last frame, then `npm run record -- timelapse`: it writes `tools/out/timelapse.webp`. `?record=cards` renders each landmark's card picture from its set viewpoint; `npm run cards` then writes `public/data/cards/`.
 
-`?quality=low`, `medium` or `high` fixes the quality tier (see `public/data/quality.json`); without it the app picks one and measures.
+`?quality=low`, `medium` or `high` fixes the quality tier (see `public/data/quality.json`); without it the app picks one and measures. `?textures=webp` keeps the half-size WebP textures the first frame uses, instead of swapping in the full-size KTX2 set, to compare.
 
 ## Controls
 
@@ -53,7 +54,7 @@ To record the run, open the dev server with `?record=timelapse` (the whole tour 
 - **1–9 and 0** jump to the ten beats.
 - **Cards:** click one to open it, and **Esc** or × to close it.
 - **M** (or the bar's speaker button) turns the music on and off; the About overlay sets its volume. Browsers block sound until you interact with the page, so it starts off; once turned on, it's remembered, and starts with your first click or key on the next visit.
-- **T** hides the time slider. **`** (backquote) shows the debug panel, with the camera mode, the card, the night ramp, exposure and bloom, the reflection, the point lights, the effects, the quality tier, the music, draw calls and triangles.
+- **T** hides the time slider. **`** (backquote) shows the debug panel, with the camera mode, the card, the night ramp, exposure and bloom, the reflection, the point lights, the effects, the quality tier, the textures in use, the music, draw calls and triangles.
 - The **© OpenStreetMap contributors** credit opens the About overlay, with the controls, the quality and volume settings, and the data and music credits.
 
 In the browser console:
@@ -81,7 +82,7 @@ npm run build-world  # 2-8. everything below, in order (about 15 s, deterministi
 | 6 | `build-city.ts` | `city.glb`: buildings merged per district, and ponds; `trees.json` |
 | 7 | `build-floor.ts` | `floor.bin`: the glider's 5 m altitude-floor grid |
 | 8 | `build-life.ts` | `life.json`: the tram lines along both embankments |
-| 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface and hero array textures, quay, water normal map and skies; and `docs/style-sheet.webp` |
+| 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface and hero array textures, quay, water normal map and skies as WebP, and `tex/full/`, the layers and quay at full size as KTX2 (about 2 minutes to encode); and `docs/style-sheet.webp` |
 
 `gen-textures` is procedural by default, offline and deterministic. The committed set is the image-API one, below. A plain `npm run textures` replaces it with the procedural set.
 
@@ -100,12 +101,12 @@ npm run cards -- --api --budget 20
 
 How a run works:
 
-- **Cache:** every answer is kept in `assets/raw/api/<name>-<key>.png`, keyed by a hash of everything sent. A rerun only asks for what's missing or changed, and `--force` asks again. Keep a copy of that folder: it isn't committed (245 MB), and without it a rerun pays again and paints different images.
+- **Cache:** every answer is kept in `assets/raw/api/<name>-<key>.png`, keyed by a hash of everything sent. A rerun only asks for what's missing or changed, and `--force` asks again. Keep a copy of that folder: it isn't committed (252 MB), and without it a rerun pays again and paints different images.
 - **Budget:** `spent.json` there totals what every answer cost, across runs and tools. `--budget <usd>` (or `OPENAI_IMAGE_BUDGET`) stops a run before a request could take the total over.
 - **Seams:** a seam is repaired only where it stands out, and a repair that strays from the surface is asked once more. Check `assets/raw/check/` (each texture tiled 2 × 2) before packing.
 - **Options:** `--only <name>` limits a run, and `OPENAI_IMAGE_QUALITY=low` makes a cheap trial pass.
 
-The committed set is 71 answers. With the trials and redos, making it cost $8.28.
+The committed set is 71 answers. With the trials and redos, making it cost $8.46.
 
 `landmarks.json`, `route.json`, `quality.json` and `audio.json` are hand-edited and never generated (`npm run audio` fills in each track's `gain` and `seconds`).
 
@@ -128,10 +129,12 @@ The music isn't part of `build-world`. To change it, download the originals into
   - `tools/osm/` and `tools/dem/` hold the committed source extracts.
   - `tools/textures/` paints the texture set; `tools/prompts/` holds the image-API prompts.
   - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers (`imageApi.ts`: the client, its cache and costs); `tools/textures/api.ts` plans the API texture set and fixes its seams.
-  - `tools/capturePlugin.ts` is the dev server's frame capture endpoint.
+  - `tools/lib/ktx2.ts` encodes the full-size textures (Basis Universal ETC1S, through `ktx2-encoder`'s WebAssembly build).
+  - `tools/capturePlugin.ts` is the dev server's frame capture endpoint, and `tools/basisPlugin.ts` serves three's Basis transcoder at `basis/` (and copies it into the build), for the KTX2 textures.
 
 ## Credits
 
 - Map data © OpenStreetMap contributors, ODbL 1.0. The extracts in `tools/osm/` and the files derived from them in `public/data/` are ODbL databases (see `tools/osm/README.md`).
 - Terrain contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.
 - Music: "Bossa Antigua", "Backbay Lounge", "Smooth Lovin" and "Night in Venice", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). Trimmed, levelled and re-encoded for the web.
+- Software: three.js (MIT), with the Basis Universal transcoder it ships (Apache 2.0, Binomial LLC), which the build copies to `basis/`.

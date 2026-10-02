@@ -29,7 +29,7 @@ import { isTouchDevice, Quality, type QualityJson } from "./quality";
 import { Route, type RouteJson } from "./route";
 import { createSim, stepSim } from "./sim";
 import { SkyDome } from "./sky";
-import { setAnisotropy } from "./textures";
+import { setAnisotropy, upgradeTextures } from "./textures";
 import { VehicleMesh } from "./vehicleMesh";
 import { SHARED } from "./world/night";
 import { NightLights } from "./world/nightLights";
@@ -126,6 +126,7 @@ async function main(): Promise<void> {
     `night      ${night.counts.lamps} lamps, ${night.counts.bulbs} bulbs, ${night.counts.streaks} streaks; floodlit ${night.floodlit.length}`,
     `effects    ${effects.describe()}`,
     `quality    ${quality.describe()}`,
+    `textures   ${models.textures.status}`,
     `music      ${sound.describe()}`,
   ]);
   hud.bindSound(sound, audioJson.tracks);
@@ -137,11 +138,12 @@ async function main(): Promise<void> {
   };
   window.addEventListener("resize", resize);
 
+  const params = new URLSearchParams(location.search);
   // Quality: the tier from ?quality=, or the device's start tier and then the frame probe.
   const treeCount = world.trees?.count ?? 0;
   const touch = isTouchDevice();
   document.documentElement.classList.toggle("touch", touch);
-  const quality = new Quality(qualityJson, new URLSearchParams(location.search).get("quality"), touch, (t) => {
+  const quality = new Quality(qualityJson, params.get("quality"), touch, (t) => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, t.pixelRatio));
     resize();
     post.setSamples(t.samples);
@@ -160,6 +162,8 @@ async function main(): Promise<void> {
   // flyover.camera = someCamera renders from it instead of the rig (for overviews; enable the
   // LAYER layers on it to see the water, trees, labels and terrain); null restores.
   const debug: { camera: PerspectiveCamera | null } = { camera: null };
+  // ?textures=webp keeps the half-size WebP set, to compare.
+  let upgrade: Promise<boolean> | null = params.get("textures") === "webp" ? Promise.resolve(false) : null;
   const frame = (dt: number, draw = true) => {
     input.update(st);
     stepSim(sim, dt);
@@ -180,22 +184,26 @@ async function main(): Promise<void> {
     post.setCamera(camera);
     post.setBloom(lighting.post.bloomStrength, lighting.post.bloomThreshold, lighting.post.bloomRadius);
     post.draw();
+    // The full-size textures stream in once the first frame is drawn, with the WebP set.
+    upgrade ??= upgradeTextures(models.textures, renderer);
   };
   // flyover.step(seconds) advances the simulation at 30 Hz and renders once (works in hidden tabs).
   const step = (seconds: number) => {
     const n = Math.max(1, Math.round(seconds * 30));
     for (let i = 0; i < n; i++) frame(1 / 30, i === n - 1);
   };
-  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, rig, scene, renderer, lighting, sky, water, night, post, effects, quality, sound, jump, step }) });
+  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, textures: models.textures, rig, scene, renderer, lighting, sky, water, night, post, effects, quality, sound, jump, step }) });
 
   // Dev only: ?record=timelapse (or beat<n>) records the run instead of playing it (src/record.ts).
-  const recordMode = import.meta.env.DEV ? new URLSearchParams(location.search).get("record") : null;
+  const recordMode = import.meta.env.DEV ? params.get("record") : null;
   if (recordMode) {
     const { record } = await import("./record");
     const view = (camera: PerspectiveCamera | null) => {
       debug.camera = camera;
       vehicleMesh.group.visible = !camera;
     };
+    // Recordings use the full-size textures from the start.
+    await (upgrade ??= upgradeTextures(models.textures, renderer));
     await record(recordMode, { step, jump, canvas, runLength: route.totalTime + LOOP.circle + LOOP.fadeOut, st, sights: world.sights, view });
     return;
   }

@@ -112,7 +112,7 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
           if (patched.has(mat)) return;
           patched.add(mat);
           if (mat.name === "building") patchBuildings(mat, models.textures);
-          else if (mat.name === "quay") patchQuays(mat, models.textures.quay);
+          else if (mat.name === "quay") patchQuays(mat, models.textures.uniforms.quay);
         });
       group.add(models.city, models.water);
     });

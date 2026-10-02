@@ -144,5 +144,102 @@
     "sky_day.webp": 28966,
     "sky_golden.webp": 37904,
     "sky_night.webp": 11270
+  },
+  "full": {
+    "layer": 1024,
+    "surfaces": {
+      "day": [
+        "full/surfaces_facade_pestEclectic_day.ktx2",
+        "full/surfaces_facade_pestClassic_day.ktx2",
+        "full/surfaces_facade_secession_day.ktx2",
+        "full/surfaces_facade_budaBaroque_day.ktx2",
+        "full/surfaces_facade_castle_day.ktx2",
+        "full/surfaces_facade_modern_day.ktx2",
+        "full/surfaces_facade_panel_day.ktx2",
+        "full/surfaces_facade_villa_day.ktx2",
+        "full/surfaces_roof_tile.ktx2",
+        "full/surfaces_roof_slate.ktx2",
+        "full/surfaces_roof_copper.ktx2",
+        "full/surfaces_roof_flat.ktx2"
+      ],
+      "lit": [
+        "full/surfaces_facade_pestEclectic_lit.ktx2",
+        "full/surfaces_facade_pestClassic_lit.ktx2",
+        "full/surfaces_facade_secession_lit.ktx2",
+        "full/surfaces_facade_budaBaroque_lit.ktx2",
+        "full/surfaces_facade_castle_lit.ktx2",
+        "full/surfaces_facade_modern_lit.ktx2",
+        "full/surfaces_facade_panel_lit.ktx2",
+        "full/surfaces_facade_villa_lit.ktx2"
+      ]
+    },
+    "heroes": {
+      "day": [
+        "full/heroes_hero_gothic_day.ktx2",
+        "full/heroes_hero_palace_day.ktx2",
+        "full/heroes_hero_secession_day.ktx2",
+        "full/heroes_hero_market_day.ktx2",
+        "full/heroes_hero_lancet_day.ktx2",
+        "full/heroes_hero_arcade_day.ktx2",
+        "full/heroes_hero_ashlar_day.ktx2",
+        "full/heroes_hero_tiles_day.ktx2",
+        "full/heroes_hero_zsolnay_day.ktx2",
+        "full/heroes_hero_copper_day.ktx2",
+        "full/heroes_hero_iron_day.ktx2",
+        "full/heroes_hero_plain_day.ktx2",
+        "full/heroes_hero_metal_day.ktx2"
+      ],
+      "lit": [
+        "full/heroes_hero_gothic_lit.ktx2",
+        "full/heroes_hero_palace_lit.ktx2",
+        "full/heroes_hero_secession_lit.ktx2",
+        "full/heroes_hero_market_lit.ktx2",
+        "full/heroes_hero_lancet_lit.ktx2",
+        "full/heroes_hero_arcade_lit.ktx2"
+      ]
+    },
+    "quay": "full/quay.ktx2",
+    "bytes": {
+      "full/surfaces_facade_pestEclectic_day.ktx2": 219887,
+      "full/surfaces_facade_pestClassic_day.ktx2": 213948,
+      "full/surfaces_facade_secession_day.ktx2": 232761,
+      "full/surfaces_facade_budaBaroque_day.ktx2": 227676,
+      "full/surfaces_facade_castle_day.ktx2": 222914,
+      "full/surfaces_facade_modern_day.ktx2": 170334,
+      "full/surfaces_facade_panel_day.ktx2": 223958,
+      "full/surfaces_facade_villa_day.ktx2": 200241,
+      "full/surfaces_roof_tile.ktx2": 231867,
+      "full/surfaces_roof_slate.ktx2": 211913,
+      "full/surfaces_roof_copper.ktx2": 289433,
+      "full/surfaces_roof_flat.ktx2": 269873,
+      "full/surfaces_facade_pestEclectic_lit.ktx2": 84259,
+      "full/surfaces_facade_pestClassic_lit.ktx2": 86574,
+      "full/surfaces_facade_secession_lit.ktx2": 210624,
+      "full/surfaces_facade_budaBaroque_lit.ktx2": 62273,
+      "full/surfaces_facade_castle_lit.ktx2": 57257,
+      "full/surfaces_facade_modern_lit.ktx2": 156972,
+      "full/surfaces_facade_panel_lit.ktx2": 75236,
+      "full/surfaces_facade_villa_lit.ktx2": 68411,
+      "full/heroes_hero_gothic_day.ktx2": 258988,
+      "full/heroes_hero_palace_day.ktx2": 231177,
+      "full/heroes_hero_secession_day.ktx2": 249866,
+      "full/heroes_hero_market_day.ktx2": 235516,
+      "full/heroes_hero_lancet_day.ktx2": 261452,
+      "full/heroes_hero_arcade_day.ktx2": 234077,
+      "full/heroes_hero_ashlar_day.ktx2": 226333,
+      "full/heroes_hero_tiles_day.ktx2": 220473,
+      "full/heroes_hero_zsolnay_day.ktx2": 262053,
+      "full/heroes_hero_copper_day.ktx2": 238132,
+      "full/heroes_hero_iron_day.ktx2": 178930,
+      "full/heroes_hero_plain_day.ktx2": 217717,
+      "full/heroes_hero_metal_day.ktx2": 155268,
+      "full/heroes_hero_gothic_lit.ktx2": 85798,
+      "full/heroes_hero_palace_lit.ktx2": 51130,
+      "full/heroes_hero_secession_lit.ktx2": 77422,
+      "full/heroes_hero_market_lit.ktx2": 102124,
+      "full/heroes_hero_lancet_lit.ktx2": 63008,
+      "full/heroes_hero_arcade_lit.ktx2": 225675,
+      "full/quay.ktx2": 241079
+    }
   }
 }

@@ -27,8 +27,8 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
     key: "buildings",
     uniforms: {
       ...common(),
-      uSurfDay: { value: tex.surfacesDay },
-      uSurfLit: { value: tex.surfacesLit },
+      uSurfDay: tex.uniforms.surfacesDay,
+      uSurfLit: tex.uniforms.surfacesLit,
       uStorey: { value: TEXTURES.storey },
       uRoofTile: { value: TEXTURES.roofTile },
       uTintGain: { value: TEXTURES.tintGain },
@@ -110,10 +110,10 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
   });
 }
 
-export function patchQuays(mat: MeshStandardMaterial, quay: Texture): void {
+export function patchQuays(mat: MeshStandardMaterial, quay: IUniform<Texture>): void {
   patchMaterial(mat, {
     key: "quays",
-    uniforms: { ...common(), uQuay: { value: quay }, uQuayTile: { value: TEXTURES.quayTile }, uTintGain: { value: TEXTURES.tintGain } },
+    uniforms: { ...common(), uQuay: quay, uQuayTile: { value: TEXTURES.quayTile }, uTintGain: { value: TEXTURES.tintGain } },
     vertexPars: "varying vec3 vQuayPos;\nvarying vec3 vQuayNormal;",
     vertex: [["begin_vertex", "vQuayPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvQuayNormal = normalize(mat3(modelMatrix) * objectNormal);"]],
     fragmentPars: `uniform sampler2D uQuay;\nuniform float uQuayTile;\nuniform float uTintGain;\nuniform vec3 uStreetGlow;\nvarying vec3 vQuayPos;\nvarying vec3 vQuayNormal;\n${NIGHT_GLSL}`,
@@ -217,8 +217,8 @@ export function patchHero(mat: MeshStandardMaterial, tex: TextureSet): void {
     key: "hero",
     uniforms: {
       ...common(),
-      uHeroDay: { value: tex.heroDay },
-      uHeroLit: { value: tex.heroLit },
+      uHeroDay: tex.uniforms.heroDay,
+      uHeroLit: tex.uniforms.heroLit,
       uHeroLitCount: { value: tex.heroLitCount },
       uHeroRough: { value: tex.heroRoughness },
       uHeroGrid: { value: tex.heroGrid },

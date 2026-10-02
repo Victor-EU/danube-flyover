@@ -6,10 +6,11 @@
 // 3. the lighting the tour sees: the night ramp at the two money shots, the sky's blend;
 // 4. the heroes in the floor grid, every card's text and picture, the quality tiers and the
 //    tram lines;
-// 5. the music: licences and credits, the levelling, and which tracks a hands-off pass hears.
+// 5. the music: licences and credits, the levelling, and which tracks a hands-off pass hears;
+// 6. the download budgets: the first-frame set, and all that loads without the music.
 // Usage: npm run simulate
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { Color, Vector4 } from "three";
 import { LOOP } from "../src/config";
 import { setPaused } from "../src/controller";
@@ -359,6 +360,21 @@ console.log("\n— Music —");
   const lights = played.map((p) => tracks[p.track].light);
   check(lights[0] === "day" && lights.slice(1).includes("night"), "a day track at golden hour, then night tracks after dusk");
   check(new Set(played.map((p) => p.track)).size === tracks.length, "every track plays within two passes");
+}
+
+// 6. The download budgets: the first-frame set, and all that loads without the music.
+console.log("\n— Downloads —");
+{
+  const root = new URL("../public/data/", import.meta.url);
+  const sizeOf = (dir: URL): number =>
+    readdirSync(dir, { withFileTypes: true }).reduce((a, e) => a + (e.isDirectory() ? sizeOf(new URL(`${e.name}/`, dir)) : statSync(new URL(e.name, dir)).size), 0);
+  const all = sizeOf(root) / 1e6;
+  const audio = sizeOf(new URL("audio/", root)) / 1e6;
+  const cards = sizeOf(new URL("cards/", root)) / 1e6;
+  const full = sizeOf(new URL("tex/full/", root)) / 1e6;
+  const first = all - audio - cards - full;
+  check(first <= 12, `${first.toFixed(1)} MB in the first-frame set, within its 12 MB`);
+  check(first + full + cards <= 25, `${(first + full + cards).toFixed(1)} MB with the full-size textures (${full.toFixed(1)} MB, after the first frame) and the cards (${cards.toFixed(1)} MB), within the 25 MB initial download`);
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");

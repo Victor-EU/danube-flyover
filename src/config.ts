@@ -149,9 +149,10 @@ export const QUALITY = {
 
 /**
  * The heroes' texture layers (tools/textures/heroes.ts paints them, tools/heroes/ models
- * with them). Each is one 512² layer of a second array texture, `tile` metres wide and tall;
- * window layers (`lit`) hold `bays` × `rows` windows per tile and come first, in the order of
- * the lit array. Alpha is roughness. Most are near-white detail tinted per vertex.
+ * with them). Each is one layer of a second array texture (1024², 512² in the WebP
+ * fallback), `tile` metres wide and tall; window layers (`lit`) hold `bays` × `rows` windows
+ * per tile and come first, in the order of the lit array. Alpha is roughness. Most are
+ * near-white detail tinted per vertex.
  */
 export const HERO_LAYERS = [
   { name: "gothic", tile: [8.8, 12], bays: 2, rows: 2, lit: true },

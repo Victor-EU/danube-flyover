@@ -2,6 +2,37 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-02 — KTX2 textures
+
+The last item M3 and M4 left: KTX2/Basis compression, and the full-size set.
+
+- **The encoder** is `ktx2-encoder` (MIT, a dev dependency), Basis Universal v2.5 built to WebAssembly: `basisu` and `toktx` aren't on this machine. `tools/lib/ktx2.ts` drives the encoder directly.
+- **ETC1S at quality 255, with mipmaps.**
+  - A 1024² facade is 215 KB. UASTC (with RDO and zstd) was 808 KB, too much to download 40 of.
+  - At full size, ETC1S beats the half-size WebP the app showed. Against the master, a facade measures 33.7 dB PSNR, where the WebP stretched back up was 23.0 dB, and a lit layer 41.6 dB against 37.6 dB.
+- **A file per layer, stacked into the array textures at load.** The encoder caps a file at 12 Mpix, which is less than the dozen 1024² surface layers. This way a changed master also re-encodes only its own file.
+- **What's full size:** the facade, roof, quay and hero layers, at their masters' 1024². The design's 2048² heroes would need bigger masters.
+  - 40 files, 7.2 MB, about 2 minutes to encode.
+  - The encoding is deterministic, so an unchanged master writes the same file.
+- **Left as WebP:**
+  - the skies: their masters are the WebP's own 2048 × 1024, and on their gradients ETC1S was worse (39.5 dB against 45.8 dB);
+  - the water's 512² normal map.
+- **Loading:**
+  - The first frame draws with the WebP set, as before.
+  - Then the KTX2 files load and three's KTX2Loader transcodes them in workers. Its transcoder (0.58 MB) is served at `basis/` from node_modules by `tools/basisPlugin.ts`, and copied there in the build.
+  - The layers are stacked, uploaded and swapped in all at once, through uniforms the materials share. The WebP set is then released.
+  - It stays on the WebP when the GPU takes no compressed format, since RGBA at full size would be four times the memory, or when anything fails (tried with one file missing).
+  - `?textures=webp` keeps the WebP, to compare. Recordings (`?record=`) wait for the full-size set.
+- **On the M3:**
+  - ETC1S transcodes to ETC2, natively: 27 MB on the GPU, where the WebP set was 62 MB decoded.
+  - Fetching, transcoding and uploading took 0.77 s locally. Uploading the 12 surface layers (8 MB) took 9–16 ms; BC7 would be twice the memory and took 22–61 ms.
+  - A fixed view renders about 1 ms faster with it: 15–21 ms against 16–22 ms, at 2560 × 1600.
+  - Close up, the facades' ornament and the quay's stone are sharper, and no block artefacts show.
+- **Budgets:** `npm run simulate` now checks them.
+  - The first-frame set is 9.7 MB, inside its 12 MB.
+  - With the full-size textures and the cards it's 18.1 MB, inside the 25 MB initial download. The music stays outside it.
+  - The bundle grew by 61 KB for the loader.
+
 ## 2026-10-02 — Hero detail
 
 M4 left three heroes simple: "the palace's long front repeats one bay, the Elisabeth Bridge's pylons are plain portals, and the lions are blocks."
@@ -24,7 +55,8 @@ M4 left three heroes simple: "the palace's long front repeats one bay, the Elisa
   - stone footings where the legs meet the ground.
   - 6,636 → 7,012 triangles.
 - **Unchanged elsewhere:** `tube` now builds its rings with the same code as `loft`, and the other heroes' files are byte-identical. The floor grid changed over the palace (the wings' roofs and the statues), the city and the trees didn't, and `npm run simulate` passes.
-- **Not redone:** the three cards' illustrations were painted from renders of the old models. Recording the renders again is free, but repainting them (`npm run cards -- --api --only <id>`, once for each) would take about $0.18 of the API budget.
+- **The three cards were repainted** from new renders of the new models: $0.18, which makes $8.46 of the $20 in all. The palace and the Chain Bridge left `FIRST_RUN` for the current prompt, and all three kept their render's sky.
+  - The other 14 renders were put back as they were. Every new render differs a little, as the trams, boats and gulls move, and a changed render would be asked again.
 
 ## 2026-10-02 — The reflection's draw set
 
@@ -39,7 +71,7 @@ The doc's "reflection passes draw a reduced set", left over from M3 and M4.
 
 ## 2026-10-02 — The image-API set
 
-The committed textures and card illustrations now come from OpenAI's image API, `gpt-image-2.5-sunburst` at "high", using your key. The set is 71 answers. With the trials and redos below, 126 were paid for: $8.28 of the $20 budget, $6.65 for the textures and $1.63 for the cards. The procedural set is still the default for a run without a key. The site credits the API set as AI-generated (About, under Images).
+The committed textures and card illustrations now come from OpenAI's image API, `gpt-image-2.5-sunburst` at "high", using your key. The set is 71 answers. With the trials and redos below, 129 were paid for: $8.46 of the $20 budget, $6.65 for the textures and $1.81 for the cards. The last three cards were repainted when their heroes gained detail (see the entry above). The procedural set is still the default for a run without a key. The site credits the API set as AI-generated (About, under Images).
 
 - **What was made:** the style sheet, eight facades with lit twins, four roofs, the quay, thirteen hero layers (six with lit twins) and seventeen card illustrations.
 - **Layout guides.** The model doesn't keep to a grid it's only told about.
@@ -57,10 +89,10 @@ The committed textures and card illustrations now come from OpenAI's image API, 
   - Answers are cached by a hash of the whole request, so a changed prompt or guide asks again instead of reusing a stale answer.
   - `spent.json` totals every answer across runs, and `--budget` stops a run before a request could go over.
   - Measured costs: $0.04 for the style sheet, which sends no images; $0.054–0.075 for an answer with reference images; $0.06 for a card. The dry-run estimate was about 30% high.
-  - The cache, `assets/raw/api/` (245 MB), isn't committed. Keep a copy: without it, a rerun pays again and paints different images. The app only needs `public/data/`.
+  - The cache, `assets/raw/api/` (252 MB), isn't committed. Keep a copy: without it, a rerun pays again and paints different images. The app only needs `public/data/`.
 - **Cards:** the renders were recorded again with the new textures before the repaint, so each illustration starts from what the flyover now shows. The repaint keeps the render's viewpoint and composition, and paints in the detail, autumn trees and light.
-  - **Skies.** The first run opened each card's prompt with the textures' rules, "no sky colour, no time of day", and 10 of the 17 came back with plain cream paper for a sky. Those rules now live in `surface.txt`, which only the textures and the style sheet get, with their text unchanged, so their cached answers still match. The 10 were asked again with the style alone and `card_sky.txt` ($0.60), and all kept their render's sky. The other 7 kept theirs the first time; they keep the first run's prompt (`FIRST_RUN` in `tools/cards.ts`), so their answers stay in the cache.
-- **Size:** detail compresses less. `public/data/tex/` grew from 0.66 MB to 1.85 MB, and the cards from 0.27 MB to 1.08 MB. The cards load as each one comes in. Without them and the music, the first-frame set is 9.6 MB, inside the 12 MB.
+  - **Skies.** The first run opened each card's prompt with the textures' rules, "no sky colour, no time of day", and 10 of the 17 came back with plain cream paper for a sky. Those rules now live in `surface.txt`, which only the textures and the style sheet get, with their text unchanged, so their cached answers still match. The 10 were asked again with the style alone and `card_sky.txt` ($0.60), and all kept their render's sky. The other 7 kept theirs the first time. They kept the first run's prompt (`FIRST_RUN` in `tools/cards.ts`), so their answers stayed in the cache. Two of them, the palace and the Chain Bridge, have since been repainted the current way.
+- **Size:** detail compresses less. `public/data/tex/` grew from 0.66 MB to 1.85 MB, and the cards from 0.27 MB to 1.07 MB. The cards load as each one comes in. Without them and the music, the first-frame set is 9.6 MB, inside the 12 MB.
 
 ## 2026-10-02 — Glider, autumn, text cards and the image API
 
