@@ -1,8 +1,8 @@
-// The bird's altitude floor from public/data/floor.bin (baked by tools/build-floor.ts): a 5 m
+// The glider's altitude floor from public/data/floor.bin (baked by tools/build-floor.ts): a 5 m
 // grid holding the highest of terrain, building roofs, hero blocks, tree crowns and bridge
 // towers, and whether each cell is open water (or a tower standing in the water).
 
-import { BIRD, WORLD } from "../config";
+import { GLIDER, WORLD } from "../config";
 import type { Grid } from "./gridFile";
 
 export const FLOOR_CELL = 5;
@@ -52,13 +52,13 @@ export class Floor {
     return this.kind[idx] === FLOOR_KIND.water || (ignoreTowers && this.kind[idx] === FLOOR_KIND.tower);
   }
 
-  /** Lowest altitude the bird may fly at (x, z): the surface over water, clearance above it elsewhere. */
-  birdMin(x: number, z: number, ignoreTowers = false): number {
+  /** Lowest altitude the glider may fly at (x, z): the surface over water, clearance above it elsewhere. */
+  gliderMin(x: number, z: number, ignoreTowers = false): number {
     if (this.isWater(x, z, ignoreTowers)) return 0;
-    return this.surface(x, z, ignoreTowers) + BIRD.landClearance;
+    return this.surface(x, z, ignoreTowers) + GLIDER.landClearance;
   }
 
-  /** Never below this: keeps the bird out of geometry even while it is being lifted. */
+  /** Never below this: keeps the glider out of geometry even while it is being lifted. */
   hardMin(x: number, z: number, ignoreTowers = false): number {
     if (this.isWater(x, z, ignoreTowers)) return 0.3;
     return this.surface(x, z, ignoreTowers) + 3;

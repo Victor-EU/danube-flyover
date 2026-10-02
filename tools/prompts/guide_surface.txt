@@ -1,0 +1,1 @@
+The first image is a layout guide for a flat surface texture: keep its courses, joints and block sizes where they are. Repaint it as a finished texture in the style of the second image (the style sheet), taking only its craft and materials, not its scene.

@@ -171,7 +171,7 @@ body {
   color: var(--accent);
 }
 
-#mode[data-mode="bird"] {
+#mode[data-mode="glider"] {
   color: var(--accent);
   border-color: var(--accent);
 }

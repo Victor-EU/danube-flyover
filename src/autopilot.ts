@@ -3,12 +3,12 @@
 // mode, the current beat, and drives the sunset-run clock. Past the last point it keeps
 // circling the Market Hall; tour.ts fades and loops after LOOP.circle seconds of that.
 
-import { BIRD, BOAT, CLOCK_EASE, CONTROL } from "./config";
+import { GLIDER, BOAT, CLOCK_EASE, CONTROL } from "./config";
 import { headingOf, wrapAngle } from "./geo";
 import type { Route, RouteSample } from "./route";
 import { ZERO_COMMAND, type State, type VehicleState } from "./state";
 
-const here: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "bird" };
+const here: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "glider" };
 const target: RouteSample = { ...here };
 const lead: RouteSample = { ...here };
 const ahead: RouteSample = { ...here };
@@ -71,7 +71,7 @@ export function updateAutopilot(st: State, route: Route, dt: number): void {
   route.sample(ap.s + 6, ahead);
   route.sample(ap.s - 6, behind);
   const slope = (ahead.y - behind.y) / 12;
-  const climb = clamp(slope * v.speed + 1.4 * (lead.y - v.y), -BIRD.maxDive, BIRD.maxClimb);
+  const climb = clamp(slope * v.speed + 1.4 * (lead.y - v.y), -GLIDER.maxDive, GLIDER.maxClimb);
 
   ap.command.yawRate = yaw;
   ap.command.accel = accel;
@@ -80,7 +80,7 @@ export function updateAutopilot(st: State, route: Route, dt: number): void {
 
 /** Pure-pursuit yaw rate toward (tx, tz), within the vehicle's turn limit. */
 function pursue(v: VehicleState, tx: number, tz: number): number {
-  const maxYaw = v.mode === "BOAT" ? BOAT.maxYawRate : BIRD.maxYawRate;
+  const maxYaw = v.mode === "BOAT" ? BOAT.maxYawRate : GLIDER.maxYawRate;
   const dx = tx - v.x;
   const dz = tz - v.z;
   const dist = Math.max(1, Math.hypot(dx, dz));
@@ -103,7 +103,7 @@ function circle(st: State, route: Route): void {
   const a2 = ang + (c.dir * Math.max(14, v.speed * 1.3)) / c.r;
   cmd.yawRate = pursue(v, c.x + Math.cos(a2) * c.r, c.z + Math.sin(a2) * c.r);
   cmd.accel = clamp(1.2 * (c.speed - v.speed), -4, 3);
-  cmd.climb = clamp(1.4 * (c.y - v.y), -BIRD.maxDive, BIRD.maxClimb);
+  cmd.climb = clamp(1.4 * (c.y - v.y), -GLIDER.maxDive, GLIDER.maxClimb);
 }
 
 /**
@@ -118,12 +118,12 @@ export function placeAt(st: State, route: Route, s: number, hold = 0): void {
   v.y = boat ? 0 : p.y;
   v.z = p.z;
   v.heading = p.heading;
-  v.speed = boat ? clamp(p.speed, BOAT.minSpeed, BOAT.maxSpeed) : clamp(p.speed, BIRD.minSpeed, BIRD.maxSpeed);
+  v.speed = boat ? clamp(p.speed, BOAT.minSpeed, BOAT.maxSpeed) : clamp(p.speed, GLIDER.minSpeed, GLIDER.maxSpeed);
   v.vSpeed = 0;
   v.yawRate = 0;
   v.roll = 0;
   v.pitch = 0;
-  v.mode = boat ? "BOAT" : "BIRD";
+  v.mode = boat ? "BOAT" : "GLIDER";
   v.transitionT = 0;
   v.boatness = boat ? 1 : 0;
   v.throttleHeld = 0;
@@ -141,7 +141,7 @@ export function placeAt(st: State, route: Route, s: number, hold = 0): void {
   if (st.sunsetRun.enabled) st.timeOfDay = route.clockAt(ap.routeTime) ?? st.timeOfDay;
 }
 
-/** Put the vehicle back at the Japanese Garden, hovering, ready to start. */
+/** Put the vehicle back at the Japanese Garden, gliding straight, ready to start. */
 export function resetToStart(st: State, route: Route): void {
   placeAt(st, route, 0, route.startHold);
 }

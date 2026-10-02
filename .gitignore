@@ -3,3 +3,5 @@ dist/
 .DS_Store
 tools/out/
 assets/raw/
+.env
+.env.*

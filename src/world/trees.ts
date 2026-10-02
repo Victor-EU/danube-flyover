@@ -1,5 +1,6 @@
 // Placeholder trees from public/data/trees.json: one instanced low-poly crown on a trunk.
 // The crown spans 4–13 m above the ground at scale 1, matching what build-floor assumes.
+// Early October: most crowns have turned (gold, orange, rust, brown) and a quarter are still green.
 
 import { BufferAttribute, type BufferGeometry, Color, CylinderGeometry, IcosahedronGeometry, InstancedMesh, Matrix4, MeshStandardMaterial } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -9,6 +10,15 @@ export interface TreesJson {
   /** Flat [x, z, scale, ...] in local metres. */
   trees: number[];
 }
+
+/** Leaf colours, each listed as often as it is common (20 in all), green first and brown last. */
+const AUTUMN: [hex: string, weight: number][] = [
+  ["#6f8a46", 3], ["#7c8f4a", 2], // still green
+  ["#d9a93c", 3], ["#e3b94e", 2], ["#c8962f", 2], // linden and maple gold
+  ["#d0782c", 2], ["#c4652a", 2], // orange
+  ["#b85a33", 2], ["#a8452b", 1], // rust and red
+  ["#957238", 1], // brown oak
+];
 
 export function buildTrees(data: TreesJson, terrain: Terrain): InstancedMesh {
   const crown = new IcosahedronGeometry(4.5, 0);
@@ -22,7 +32,7 @@ export function buildTrees(data: TreesJson, terrain: Terrain): InstancedMesh {
     for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
     g.setAttribute("color", new BufferAttribute(col, 3));
   };
-  // Instance colours multiply these: white crowns take the green, the trunk stays dark.
+  // Instance colours multiply these: white crowns take the leaf colour, the trunk stays dark.
   paint(crown, new Color(1, 1, 1));
   paint(trunk, new Color(0.55, 0.42, 0.3));
   const geo = mergeGeometries([crown, trunk.toNonIndexed()])!; // the icosahedron is already non-indexed
@@ -40,17 +50,20 @@ export function buildTrees(data: TreesJson, terrain: Terrain): InstancedMesh {
     [order[i], order[j]] = [order[j], order[i]];
   }
   const mesh = new InstancedMesh(geo, new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), count);
-  const greens = ["#6a8a4c", "#789854", "#5f7f45", "#82995a", "#738b48", "#668656"].map((c) => new Color(c));
+  const leaves = AUTUMN.flatMap(([hex, weight]) => Array<Color>(weight).fill(new Color(hex)));
   const m = new Matrix4();
   for (let n = 0; n < count; n++) {
     const i = order[n];
     const [x, z, s] = [t[i * 3], t[i * 3 + 1], t[i * 3 + 2]];
-    // A stable per-tree variation in height (never taller than build-floor assumes) and colour.
+    // A stable per-tree variation in height (never taller than build-floor assumes) and colour,
+    // with the colour also drifting slowly across the city, so neighbouring trees turn together.
     const v = Math.abs((Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1);
+    const drift = 0.5 + 0.25 * (Math.sin(x * 0.0061 + 1.3) + Math.sin(z * 0.0047 - 0.4));
+    const c = (v * 0.7 + drift * 0.3) % 1;
     m.makeScale(s, s * (0.86 + v * 0.14), s);
     m.setPosition(x, terrain.heightAt(x, z) - 0.3, z);
     mesh.setMatrixAt(n, m);
-    mesh.setColorAt(n, greens[Math.floor(v * greens.length) % greens.length]);
+    mesh.setColorAt(n, leaves[Math.floor(c * leaves.length) % leaves.length]);
   }
   mesh.castShadow = mesh.receiveShadow = true;
   mesh.name = "trees";

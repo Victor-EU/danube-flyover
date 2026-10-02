@@ -1,6 +1,6 @@
 // The one state object. Each module writes its own part once per frame and reads the rest.
 
-export type Mode = "BIRD" | "LANDING" | "BOAT" | "TAKEOFF";
+export type Mode = "GLIDER" | "LANDING" | "BOAT" | "TAKEOFF";
 export type CameraMode = "follow" | "orbit" | "reveal" | "low";
 
 /** Rates the vehicle integrates: the controller blends autopilot and manual versions of this. */
@@ -26,7 +26,7 @@ export interface VehicleState {
   /** Seconds since the current transition started. */
   transitionT: number;
   transitionFrom: { speed: number; y: number };
-  /** 0 = bird mesh, 1 = boat mesh; crossfaded behind the splash. */
+  /** 0 = glider mesh, 1 = boat mesh; crossfaded behind the splash. */
   boatness: number;
   /** Seconds the throttle has been held at max boat speed. */
   throttleHeld: number;
@@ -56,7 +56,7 @@ export interface State {
   autopilot: {
     s: number;
     holdLeft: number;
-    routeMode: "bird" | "boat";
+    routeMode: "glider" | "boat";
     command: Command;
     beat: string;
     routeTime: number;
@@ -96,7 +96,7 @@ export function createState(): State {
     autopilot: {
       s: 0,
       holdLeft: 0,
-      routeMode: "bird",
+      routeMode: "glider",
       command: { ...ZERO_COMMAND },
       beat: "",
       routeTime: 0,
@@ -114,7 +114,7 @@ export function createState(): State {
       yawRate: 0,
       roll: 0,
       pitch: 0,
-      mode: "BIRD",
+      mode: "GLIDER",
       transitionT: 0,
       transitionFrom: { speed: 0, y: 0 },
       boatness: 0,

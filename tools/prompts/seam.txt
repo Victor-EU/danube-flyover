@@ -1,0 +1,1 @@
+Repaint only the transparent band of the mask so the texture runs on across it without a break: continue the surrounding pattern exactly (the same courses, joints, tiles, mouldings and windows, the same size, spacing, colour and flat light), as if the band had never been there. Leave everything outside the band exactly as it is.

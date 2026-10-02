@@ -15,7 +15,7 @@ export function formatClock(h: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
-const MODE_LABEL = { BIRD: "Bird", LANDING: "Bird", BOAT: "Boat", TAKEOFF: "Boat" } as const;
+const MODE_LABEL = { GLIDER: "Glider", LANDING: "Glider", BOAT: "Boat", TAKEOFF: "Boat" } as const;
 
 export class Hud {
   private readonly slider = $<HTMLInputElement>("slider");
@@ -113,7 +113,7 @@ export class Hud {
     // The badge switches halfway through a transition (1.0 s into landing, 1.25 s into take-off).
     let label: string = MODE_LABEL[v.mode];
     if (v.mode === "LANDING" && v.transitionT >= 1.0) label = "Boat";
-    if (v.mode === "TAKEOFF" && v.transitionT >= 1.25) label = "Bird";
+    if (v.mode === "TAKEOFF" && v.transitionT >= 1.25) label = "Glider";
     this.mode.textContent = label;
     this.mode.dataset.mode = label.toLowerCase();
     const w = st.control.w;
@@ -181,7 +181,7 @@ export class Hud {
       `mode       ${v.mode}${v.mode === "LANDING" || v.mode === "TAKEOFF" ? ` ${v.transitionT.toFixed(2)} s` : ""}${st.paused ? "  (paused)" : ""}`,
       `control w  ${st.control.w.toFixed(2)}  (idle ${st.control.idleFor.toFixed(1)} s)`,
       `speed      ${v.speed.toFixed(1)} m/s`,
-      `altitude   ${v.y.toFixed(1)} m   floor ${world.floor.birdMin(v.x, v.z).toFixed(1)} m`,
+      `altitude   ${v.y.toFixed(1)} m   floor ${world.floor.gliderMin(v.x, v.z).toFixed(1)} m`,
       `lateral    ${v.lateral.toFixed(0)} m from route`,
       `route      ${(ap.s / 1000).toFixed(2)} / ${(r.length / 1000).toFixed(2)} km  (${ap.routeMode})${ap.phase === "end" ? `  end circle ${ap.endT.toFixed(1)} s` : ""}`,
       `beat       ${ap.beat}`,

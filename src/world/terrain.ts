@@ -14,15 +14,16 @@ export const TERRAIN_CLASS = { bed: 0, street: 1, park: 2, wood: 3, square: 4, p
 /** Street-light glow at night by class: streets and squares lit, parks a little, woods dark. */
 const GLOW: Record<number, number> = { 1: 1, 4: 0.85, 5: 0.25, 2: 0.12, 7: 0.05 };
 
+/** Ground colour by class, in early October: tired olive grass, leaf litter under the woods. */
 const PALETTE: Record<number, Color> = {
   0: new Color("#2f3f3d"),
   1: new Color("#b9ae97"),
-  2: new Color("#7a9a58"),
-  3: new Color("#5b7a44"),
+  2: new Color("#8a9852"),
+  3: new Color("#77693d"),
   4: new Color("#cbbf9f"),
-  5: new Color("#8fae62"),
+  5: new Color("#8aa65e"),
   6: new Color("#a99d8a"),
-  7: new Color("#7c9f5b"),
+  7: new Color("#879a55"),
 };
 
 export class Terrain {

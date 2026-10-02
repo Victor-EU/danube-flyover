@@ -2,6 +2,60 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-02 — The image-API set
+
+The committed textures and card illustrations now come from OpenAI's image API, `gpt-image-2.5-sunburst` at "high", using your key. The set is 71 answers. With the trials and redos below, 116 were paid for: $7.68 of the $20 budget, $6.65 for the textures and $1.03 for the cards. The procedural set is still the default for a run without a key. The site credits the API set as AI-generated (About, under Images).
+
+- **What was made:** the style sheet, eight facades with lit twins, four roofs, the quay, thirteen hero layers (six with lit twins) and seventeen card illustrations.
+- **Layout guides.** The model doesn't keep to a grid it's only told about.
+  - The first facade came back with three uneven storeys, the ground floor taking 40% of the height. The shader maps one storey to each quarter of the tile, so it couldn't use that.
+  - So each texture repaints its procedural twin, drawn to the exact grid, given as the first image; the style sheet goes second. The guided facades all have four equal storeys and four bays.
+  - **Unguided surfaces can come back as something else entirely.** The quay, the hero tiles and the slate roof came back as the style sheet's riverside scene, and the flat roof as a building plan.
+  - Only the tile and copper roofs stay unguided. Their unguided answers were the better ones; guided, their seam repairs went wrong.
+- **Neutral colour.** Every day texture is tinted at runtime: the city's by building, the heroes' by face. The model paints in colour, for example cream plaster when asked for near-white. So each texture is scaled channel by channel until its brighter half averages what its procedural twin's does. The tints and the lighting then work as they were tuned.
+- **Seams.**
+  - An axis is repaired only where its seam stands out: more than 1.25 × the typical difference between neighbouring pixels, plus 2. Most guided answers already tile, because their guide does, and a repair can only add a band that doesn't line up. The quay's first repair left a strip of ghost joints.
+  - Each repair is checked against what it replaced. One that strays (the sheet metal's band came back as a strip of the city) is asked once more with a plainer prompt. The check rejects a repair that differs by more than 2.4 × its band's own contrast, or shifts a channel's mean by more than 40.
+  - The printed seam error now sits beside the typical difference between neighbouring pixels. A hard edge in the pattern can land on the border; on the secession facade that read as a seam of 35.
+- **Lit twins:** night − 0.85 × day, minus a floor of 8. The floor clears the faint wall glow the secession facade had left, which would have shown as pale rectangles around its lit windows.
+- **Cache and cost.**
+  - Answers are cached by a hash of the whole request, so a changed prompt or guide asks again instead of reusing a stale answer.
+  - `spent.json` totals every answer across runs, and `--budget` stops a run before a request could go over.
+  - Measured costs: $0.04 for the style sheet, which sends no images; $0.054–0.075 for an answer with reference images; $0.06 for a card. The dry-run estimate was about 30% high.
+  - The cache, `assets/raw/api/` (177 MB), isn't committed. Keep a copy: without it, a rerun pays again and paints different images. The app only needs `public/data/`.
+- **Cards:** the renders were recorded again with the new textures before the repaint, so each illustration starts from what the flyover now shows. The repaint keeps the render's viewpoint and composition, and paints in the detail, autumn trees and light.
+- **Size:** detail compresses less. `public/data/tex/` grew from 0.66 MB to 1.85 MB, and the cards from 0.27 MB to 1.18 MB. The cards load as each one comes in. Without them and the music, the first-frame set is 9.6 MB, inside the 12 MB.
+
+## 2026-10-02 — Glider, autumn, text cards and the image API
+
+Four open questions closed.
+
+- **The image API will make the textures and the card illustrations,** with a key you supply. (They were made the same day: see the entry above.)
+  - **Model:** `gpt-image-2.5-sunburst`, the precise one of OpenAI's current pair, best at keeping to a reference. M3's code named `gpt-image-1`, which shuts down on 2026-10-23.
+  - **Terms:** OpenAI's Services Agreement gives the customer ownership of the output, so it can go in a public build and repository. The site will credit it as AI-generated, since the terms forbid passing it off as human-made. The outputs' C2PA credentials don't survive our re-encoding, and keeping them isn't required.
+  - **The key** goes in a git-ignored `.env.local` and is read only by `tools/`. The runtime never sees it.
+  - **What it makes:**
+    - the style sheet;
+    - the eight facades and their lit twins;
+    - four roofs and the quay;
+    - the thirteen hero layers, at their tiles' own aspect, with lit twins for the six window layers (new prompts in `tools/prompts/hero_*.txt`);
+    - the seventeen card illustrations.
+  - **Seams:** the API can't make a tile, so each day texture has its seams repainted. It is shifted by half so the seams meet in the middle, a masked edit repaints a band over them, and only that band is blended back. Shifts are by whole bays and storeys, so the windows keep the grid the night lighting lights them by; facades shift only sideways, keeping their ground floor at the bottom.
+  - **Cards:** each card is a repaint of its scene render, so the picture keeps the flyover's own composition and hour. The render goes in first and the style sheet second.
+  - **Cost:** `--dry` lists 84 requests, an estimated $7.70 at "high" (67 for textures, 17 for cards). A real run totals the cost from the tokens each answer reports. Every answer is kept in `assets/raw/api/` and reused, so a rerun or a crash never pays twice.
+
+- **The vehicle is a glider.** It replaces the bird of M0–M4.
+  - The model is a white low-poly sailplane in code (`src/vehicleMesh.ts`): a slim pod with a dark canopy, a tail boom, 7.4 m of tapered wing with dihedral and winglets, red tips and a red T-tail. Navigation lights (red to port, green to starboard) brighten at night for the bloom to catch.
+  - It still lands on the Danube and carries on as the boat, swapped behind the splash.
+  - **It can't hover, so the opening hold glides.** The two seconds before the tour now carry it straight on over the Japanese Garden instead of holding it still in the air. Route timings are unchanged. Paused, it circles, as the bird did.
+  - Flight limits, camera offsets and the route are unchanged.
+  - The code says glider throughout: the mode is `GLIDER`, `route.json`'s legs are `"glider"`, the config is `GLIDER` and the floor query `gliderMin`. The gulls are still birds.
+- **Autumn.** The sun is set for 1 October, and now the trees match.
+  - Three quarters of the crowns have turned, in a weighted mix of linden and maple gold, orange, rust and oak brown; a quarter are still green. The mix drifts slowly across the city, so neighbouring trees turn together.
+  - The parks' grass is a tired olive, the woods' floor is leaf litter, and the sports pitches stay greener.
+  - The card illustrations were re-rendered in autumn.
+- **Text cards only in V1.** No voice-over, so the beat durations stand.
+
 ## 2026-10-02 — Music
 
 - **Music only, no sound effects.** The landing and take-off cues from the open question were built first: wind as the bird and water lapping, hull hiss and a distant city as the boat, all synthesised from noise and crossfaded over the transitions, with a splash at touchdown and spray and wingbeats at lift-off. Listening to them, we dropped them: the jazz carries the flyover better on its own.

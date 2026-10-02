@@ -9,9 +9,10 @@
 // and docs/style-sheet.webp, the locked style reference (every texture on one sheet).
 //
 // The default is procedural: deterministic, offline, no licence questions. The design's image
-// API path (prompts in tools/prompts/, the style sheet attached to every request) runs with
-// --api when OPENAI_API_KEY is set; see tools/lib/imageApi.ts.
-// Usage: npm run gen-textures [-- --api] [-- --only <name>]
+// API path (prompts in tools/prompts/, the style sheet attached to every request) replaces the
+// facades, roofs, quay and hero layers with --api; --dry lists its requests and their cost
+// first. See tools/textures/api.ts and tools/lib/imageApi.ts.
+// Usage: npm run gen-textures [-- --api [--dry] [--force]] [-- --only <name>]
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import sharp, { type OverlayOptions } from "sharp";
@@ -21,7 +22,8 @@ import { heroSvg } from "./textures/heroes";
 import { paintSky } from "./textures/sky";
 import { quaySvg, roofSvg, waterNormals } from "./textures/surfaces";
 import { rasterise } from "./textures/svg";
-import { generateWithApi } from "./lib/imageApi";
+import { imageClient } from "./lib/imageApi";
+import { generateWithApi } from "./textures/api";
 
 const RAW = new URL("../assets/raw/", import.meta.url);
 const DOCS = new URL("../docs/", import.meta.url);
@@ -37,7 +39,9 @@ const save = async (name: string, png: Buffer) => {
 };
 
 if (process.argv.includes("--api")) {
-  await generateWithApi(RAW, want);
+  const api = imageClient();
+  written.push(...(await generateWithApi(api, RAW, want)));
+  api.summary();
 } else {
   for (const style of TEXTURES.facades)
     for (const mode of ["day", "lit"] as const) {
@@ -67,7 +71,7 @@ if (process.argv.includes("--api")) {
 }
 console.log(`assets/raw: ${written.length} textures in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
 
-if (!only) await styleSheet();
+if (!only && !process.argv.includes("--dry")) await styleSheet();
 
 /**
  * The style sheet: a riverside street at golden hour and the same street at night, built from

@@ -1,8 +1,8 @@
-// Integrates the bird or boat from the blended command, plays the scripted landing and
+// Integrates the glider or boat from the blended command, plays the scripted landing and
 // take-off curves, and applies the constraints: corridor, world edge, ceiling, altitude
-// floor and bridge decks for the bird; river polygon and piers for the boat.
+// floor and bridge decks for the glider; river polygon and piers for the boat.
 
-import { BIRD, BOAT, TRANSITION, WORLD } from "./config";
+import { GLIDER, BOAT, TRANSITION, WORLD } from "./config";
 import { forwardOf, headingOf, wrapAngle, type XZ } from "./geo";
 import type { Route, RouteSample } from "./route";
 import type { State, VehicleState } from "./state";
@@ -14,14 +14,17 @@ const smoothstep = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
-const routePt: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "bird" };
+const routePt: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "glider" };
 
 export function updateVehicle(st: State, world: World, route: Route, dt: number): void {
   const v = st.vehicle;
   const cmd = st.control.command;
 
   if (st.autopilot.holdLeft > 0) {
-    // Hovering over the Japanese Garden before the tour starts.
+    // Before the tour starts: gliding straight on over the Japanese Garden (a glider can't hover).
+    const f = forwardOf(v.heading);
+    v.x += f.x * v.speed * dt;
+    v.z += f.z * v.speed * dt;
     v.vSpeed = 0;
     v.yawRate = 0;
     updateVisuals(st, dt);
@@ -31,9 +34,9 @@ export function updateVehicle(st: State, world: World, route: Route, dt: number)
   const prev = { x: v.x, z: v.z };
   const y0 = v.y;
   switch (v.mode) {
-    case "BIRD":
+    case "GLIDER":
       v.yawRate = cmd.yawRate;
-      v.speed = clamp(v.speed + cmd.accel * dt, BIRD.minSpeed, BIRD.maxSpeed);
+      v.speed = clamp(v.speed + cmd.accel * dt, GLIDER.minSpeed, GLIDER.maxSpeed);
       v.y += cmd.climb * dt;
       break;
     case "BOAT": {
@@ -53,10 +56,10 @@ export function updateVehicle(st: State, world: World, route: Route, dt: number)
       break;
     }
     case "TAKEOFF": {
-      // 2.5 s: speed rises to bird cruise, altitude to 25 m on an ease-out.
+      // 2.5 s: speed rises to glider cruise, altitude to 25 m on an ease-out.
       const u = clamp(v.transitionT / TRANSITION.takeoff, 0, 1);
       v.yawRate = cmd.yawRate;
-      v.speed = v.transitionFrom.speed + (BIRD.cruise - v.transitionFrom.speed) * smoothstep(0, 1, u);
+      v.speed = v.transitionFrom.speed + (GLIDER.cruise - v.transitionFrom.speed) * smoothstep(0, 1, u);
       v.y = TRANSITION.takeoffAltitude * easeOut(u);
       break;
     }
@@ -69,15 +72,15 @@ export function updateVehicle(st: State, world: World, route: Route, dt: number)
   route.sample(st.autopilot.s, routePt);
   v.lateral = Math.hypot(v.x - routePt.x, v.z - routePt.z);
 
-  const birdLike = v.mode === "BIRD" || (v.mode === "TAKEOFF" && v.transitionT > 1.0);
+  const gliderLike = v.mode === "GLIDER" || (v.mode === "TAKEOFF" && v.transitionT > 1.0);
   const boatLike = v.mode === "BOAT" || (v.mode === "LANDING" && v.transitionT > 1.0);
-  if (birdLike) constrainBird(v, world, dt);
+  if (gliderLike) constrainGlider(v, world, dt);
   if (boatLike) constrainBoat(v, world, prev);
   v.vSpeed = (v.y - y0) / Math.max(dt, 1e-4);
   updateVisuals(st, dt);
 }
 
-function constrainBird(v: VehicleState, world: World, dt: number): void {
+function constrainGlider(v: VehicleState, world: World, dt: number): void {
   const b = world.bounds;
   const m = WORLD.edgeMargin;
 
@@ -88,20 +91,20 @@ function constrainBird(v: VehicleState, world: World, dt: number): void {
   v.x = clamp(v.x, b.x0 + 10, b.x1 - 10);
   v.z = clamp(v.z, b.z0 + 10, b.z1 - 10);
 
-  // Corridor: pushing past 300 m from the route slows and turns the bird back.
-  const over = v.lateral - BIRD.corridor;
+  // Corridor: pushing past 300 m from the route slows and turns the glider back.
+  const over = v.lateral - GLIDER.corridor;
   if (over > 0) {
     turnToward(v, headingOf(routePt.x - v.x, routePt.z - v.z), dt, Math.min(1, over / 40));
-    v.speed = Math.max(BIRD.minSpeed, v.speed - 3 * dt * Math.min(1, over / 40));
+    v.speed = Math.max(GLIDER.minSpeed, v.speed - 3 * dt * Math.min(1, over / 40));
     if (over > 40) {
-      const k = (BIRD.corridor + 40) / v.lateral;
+      const k = (GLIDER.corridor + 40) / v.lateral;
       v.x = routePt.x + (v.x - routePt.x) * k;
       v.z = routePt.z + (v.z - routePt.z) * k;
     }
   }
 
   // Ceiling.
-  v.y = Math.min(v.y, BIRD.ceiling);
+  v.y = Math.min(v.y, GLIDER.ceiling);
 
   // Bridge decks: decide under or over on approach, then hold to it.
   const f = forwardOf(v.heading);
@@ -119,20 +122,20 @@ function constrainBird(v: VehicleState, world: World, dt: number): void {
     if (side === "under") {
       under = true;
       maxY = deck.underside - 1.5;
-    } else deckMin = deck.top + BIRD.deckClearance;
+    } else deckMin = deck.top + GLIDER.deckClearance;
   } else if (v.deckSide.size) v.deckSide.clear();
 
-  // Floor, with lookahead so the bird climbs before a building rather than at it.
+  // Floor, with lookahead so the glider climbs before a building rather than at it.
   let need = 0;
   for (const t of [0, 0.5, 1, 2]) {
     const px = v.x + f.x * v.speed * t;
     const pz = v.z + f.z * v.speed * t;
-    const min = Math.max(world.floor.birdMin(px, pz, under), t === 0 ? deckMin : 0);
+    const min = Math.max(world.floor.gliderMin(px, pz, under), t === 0 ? deckMin : 0);
     need = Math.max(need, (min - v.y) / Math.max(t, 0.3));
   }
   if (need > 0) {
     v.y += Math.min(need, 25) * dt;
-    v.speed = Math.max(BIRD.minSpeed, v.speed - 4 * dt);
+    v.speed = Math.max(GLIDER.minSpeed, v.speed - 4 * dt);
   }
   v.y = Math.max(v.y, world.floor.hardMin(v.x, v.z, under));
   if (onDeck && !under) v.y = Math.max(v.y, onDeck.top + 2);
@@ -191,7 +194,7 @@ function applyPush(v: VehicleState, push: XZ): void {
 }
 
 function turnToward(v: VehicleState, heading: number, dt: number, strength: number): void {
-  const maxYaw = v.mode === "BOAT" ? BOAT.maxYawRate : BIRD.maxYawRate;
+  const maxYaw = v.mode === "BOAT" ? BOAT.maxYawRate : GLIDER.maxYawRate;
   const err = wrapAngle(heading - v.heading);
   v.heading = wrapAngle(v.heading + clamp(err, -1, 1) * maxYaw * strength * dt);
 }
@@ -208,8 +211,8 @@ function updateVisuals(st: State, dt: number): void {
     v.roll += (bank - v.roll) * k;
     v.pitch += (clamp(Math.atan2(v.vSpeed, Math.max(v.speed, 1)), -0.6, 0.6) - v.pitch) * k;
   }
-  // Bird and boat meshes swap behind the splash: landing at about 1.0 s, take-off at about 0.5 s.
-  if (v.mode === "BIRD") v.boatness = 0;
+  // Glider and boat meshes swap behind the splash: landing at about 1.0 s, take-off at about 0.5 s.
+  if (v.mode === "GLIDER") v.boatness = 0;
   else if (v.mode === "BOAT") v.boatness = 1;
   else if (v.mode === "LANDING") v.boatness = smoothstep(0.8, 1.2, v.transitionT);
   else v.boatness = 1 - smoothstep(0.3, 0.7, v.transitionT);

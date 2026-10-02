@@ -1,0 +1,1 @@
+Material texture seen straight on, {width} metres across the square, seamlessly tileable in both directions.

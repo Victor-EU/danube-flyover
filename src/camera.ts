@@ -1,6 +1,6 @@
-// Third-person rig. `follow` (the default) sits 12 m behind and 4 m above the bird, 6 m behind
+// Third-person rig. `follow` (the default) sits 12 m behind and 4 m above the glider, 6 m behind
 // and 1.5 m above the boat, smoothed with a critically damped spring (0.4 s); landing and
-// take-off blend the offsets and the field of view (70° bird, 60° boat). The route's camera
+// take-off blend the offsets and the field of view (70° glider, 60° boat). The route's camera
 // keys switch to `orbit` (the rig swings round the vehicle to hold a landmark in frame beside
 // it) or `reveal` (far behind and high, catching up by the next key); `low` (just above the
 // vehicle) takes over by itself under bridge decks. Every change blends over 1.5 s. Keys are
@@ -45,7 +45,7 @@ interface Pose {
   fov: number;
 }
 
-const newPose = (): Pose => ({ rel: 0, back: 0, up: 0, lx: 0, ly: 0, lz: 0, fov: CAMERA.bird.fov });
+const newPose = (): Pose => ({ rel: 0, back: 0, up: 0, lx: 0, ly: 0, lz: 0, fov: CAMERA.glider.fov });
 
 function mix(a: Pose, b: Pose, k: number, out: Pose): void {
   // `rel` stays within ±maxSwing, so a plain lerp swings the camera round behind the vehicle.
@@ -67,7 +67,7 @@ const tmpT = new Vector3();
 const tmpL = new Vector3();
 
 export class CameraRig {
-  readonly camera = new PerspectiveCamera(CAMERA.bird.fov, 1, 0.5, 20000);
+  readonly camera = new PerspectiveCamera(CAMERA.glider.fov, 1, 0.5, 20000);
   /** The point ahead of the vehicle the follow camera looks at; also the centre of the shadow box. */
   readonly focus = new Vector3();
   private yaw = 0;
@@ -101,8 +101,8 @@ export class CameraRig {
   update(st: State, dt: number): void {
     const v = st.vehicle;
     const cam = st.camera;
-    let b: number; // 0 bird framing, 1 boat framing
-    if (v.mode === "BIRD") b = 0;
+    let b: number; // 0 glider framing, 1 boat framing
+    if (v.mode === "GLIDER") b = 0;
     else if (v.mode === "BOAT") b = 1;
     else if (v.mode === "LANDING") b = smoothstep(v.transitionT / TRANSITION.landing);
     else b = 1 - smoothstep(v.transitionT / TRANSITION.takeoff);
@@ -187,11 +187,11 @@ export class CameraRig {
 
   /** The pose a mode asks for this frame. */
   private pose(mode: CameraMode, target: Sight | undefined, u: number, b: number, out: Pose): void {
-    const back = lerp(CAMERA.bird.back, CAMERA.boat.back, b);
-    const up = lerp(CAMERA.bird.up, CAMERA.boat.up, b);
+    const back = lerp(CAMERA.glider.back, CAMERA.boat.back, b);
+    const up = lerp(CAMERA.glider.up, CAMERA.boat.up, b);
     const ahead = 16 - 6 * b;
     const lookUp = 0.6 + 0.4 * b;
-    out.fov = lerp(CAMERA.bird.fov, CAMERA.boat.fov, b);
+    out.fov = lerp(CAMERA.glider.fov, CAMERA.boat.fov, b);
     out.rel = 0;
     out.lx = 0;
     out.ly = lookUp;
@@ -203,8 +203,8 @@ export class CameraRig {
         break;
       case "low": {
         const L = CAMERA.low;
-        out.back = lerp(L.bird.back, L.boat.back, b);
-        out.up = lerp(L.bird.up, L.boat.up, b);
+        out.back = lerp(L.glider.back, L.boat.back, b);
+        out.up = lerp(L.glider.up, L.boat.up, b);
         // Look further ahead and a little up, so the deck passes overhead.
         out.ly = lookUp + 1;
         out.lz = 40;
@@ -222,8 +222,8 @@ export class CameraRig {
         // Swing the rig only as far as it takes to keep the target within `frame` of the vehicle.
         const off = wrapAngle(headingOf(T.x - this.pos.x, T.z - this.pos.z) - this.yaw);
         out.rel = clamp(off - clamp(off, -O.frame, O.frame), -O.maxSwing, O.maxSwing);
-        out.back = lerp(O.bird.back, O.boat.back, b);
-        out.up = lerp(O.bird.up, O.boat.up, b);
+        out.back = lerp(O.glider.back, O.boat.back, b);
+        out.up = lerp(O.glider.up, O.boat.up, b);
         // Aim half way between the vehicle and the target, so both are in frame.
         const f = forwardOf(this.yaw + out.rel);
         tmpC.set(this.pos.x - f.x * out.back, this.height + out.up, this.pos.z - f.z * out.back);

@@ -1,11 +1,11 @@
-// Step 7: the bird's altitude floor. A 5 m grid over the world holding, per cell, the highest
+// Step 7: the glider's altitude floor. A 5 m grid over the world holding, per cell, the highest
 // of terrain, building roofs, the hero models, tree crowns (see below) and bridge towers, plus
 // whether the cell is open water or a tower standing in it. Bridge decks are not in the grid:
 // the runtime's deck queries decide under or over (see docs/decisions.md).
 // Writes public/data/floor.bin. Usage: npm run build-floor (after build-city)
 
 import { readFileSync } from "node:fs";
-import { BIRD, WORLD } from "../src/config";
+import { GLIDER, WORLD } from "../src/config";
 import { worldBounds } from "../src/world/bounds";
 import { Bridges, type BridgesJson } from "../src/world/bridges";
 import { FLOOR_CELL, FLOOR_KIND } from "../src/world/floor";
@@ -69,7 +69,7 @@ function raise(minX: number, minZ: number, maxX: number, maxZ: number, inside: (
       if (wet && k !== FLOOR_KIND.tower) continue;
       if (top > height.data[idx] || wet) {
         height.data[idx] = Math.max(top, height.data[idx]);
-        // Towers in the river are marked, so a bird passing under the deck can ignore them;
+        // Towers in the river are marked, so a glider passing under the deck can ignore them;
         // on land they are simply solid.
         if (wet) kind[idx] = FLOOR_KIND.tower;
         n++;
@@ -119,13 +119,13 @@ for (const l of landmarks)
   }
 
 // Tree crowns, as the runtime draws them: radius 4.5 m and top 13 m above the ground, times the
-// scale. The bird keeps only TREE_CLEARANCE above a crown, not the full land clearance, so the
+// scale. The glider keeps only TREE_CLEARANCE above a crown, not the full land clearance, so the
 // crown goes in lowered by the difference.
 const TREE_CLEARANCE = 4;
 for (let t = 0; t < trees.length; t += 3) {
   const [x, z, s] = [trees[t], trees[t + 1], trees[t + 2]];
   const r = 4.5 * s;
-  const top = terrain.heightAt(x, z) + 13 * s + TREE_CLEARANCE - BIRD.landClearance;
+  const top = terrain.heightAt(x, z) + 13 * s + TREE_CLEARANCE - GLIDER.landClearance;
   counts.tree += raise(x - r, z - r, x + r, z + r, (px, pz) => Math.hypot(px - x, pz - z) <= r + HALF_DIAG * 0.5, top, FLOOR_KIND.land);
 }
 

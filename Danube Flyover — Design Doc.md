@@ -6,7 +6,7 @@ Oct 1, 2026 · @Victor Zhang
 
 **Platform: a web app, desktop first.** A static site (Vite, TypeScript, three.js) that runs in a desktop browser with no install and deploys to any static host. Mobile is best-effort through the low quality tier, with a dedicated pass only in the final milestone.
 
-Danube Flyover is a browser-based 3D showcase of the Budapest riverfront: you fly as a bird from the Japanese Garden on Margaret Island to the Central Market Hall, and at any point you can land on the water and continue as a boat. An autopilot plays the trip as a guided, cinematic tour by default; the user can take control at any moment and hand it back.
+Danube Flyover is a browser-based 3D showcase of the Budapest riverfront: you fly a glider from the Japanese Garden on Margaret Island to the Central Market Hall, and at any point you can land on the water and continue as a boat. An autopilot plays the trip as a guided, cinematic tour by default; the user can take control at any moment and hand it back.
 
 The world is a stylized, low-poly Budapest, not a photoreal reconstruction. Real geography (river bends, bridge positions, the two Buda hills) gives it credibility; generated textures and a storybook palette give it character. A time-of-day slider runs the whole scene from morning haze through golden hour to a fully lit night.
 
@@ -35,36 +35,36 @@ The route is about 5.5 km of river, and about 8.6 km flown once the arc around P
 
 ## The experience
 
-The app opens in autopilot at golden hour, hovering above the Japanese Garden, and starts the tour after two seconds. There is no menu; the only persistent UI is a thin bottom bar with the time-of-day slider, a mode indicator (bird or boat), a play/pause button, a music button (off until the user turns it on), a small "take control" hint that fades after first use, and a small "© OpenStreetMap contributors" credit that opens the About overlay.
+The app opens in autopilot at golden hour, gliding above the Japanese Garden, and the autopilot takes it into the tour after two seconds. There is no menu; the only persistent UI is a thin bottom bar with the time-of-day slider, a mode indicator (glider or boat), a play/pause button, a music button (off until the user turns it on), a small "take control" hint that fades after first use, and a small "© OpenStreetMap contributors" credit that opens the About overlay.
 
 **The route**, north to south, with the planned camera beats. Times follow from each beat's distance and keyframed speed (`npm run timetable` prints them from `route.json`; regenerate this table after editing the route). The clock column is the sunset run (see Demo mode).
 
 | # | Beat | Mode | Approx. time | Clock (sunset run) | Camera |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Japanese Garden, Margaret Island | Bird | 0:00–1:42 | 17:30 | Rise from the ponds, clear the treeline, reveal the river, then a fast run down the island |
-| 2 | Margaret Bridge | Bird | 1:42–2:20 | 17:45 | Cross the bridge low, bank left toward Pest |
-| 3 | Parliament | Bird | 2:20–3:07 | 17:55–18:10 | The route arcs about 130° around the dome on the river side while the camera holds on it, then pulls back for the full facade |
-| 4 | Shoes on the Danube | Bird | 3:07–3:38 | 18:10 | Slow, low pass along the Pest bank |
-| 5 | Castle Hill and Fisherman's Bastion | Bird | 3:38–4:44 | 18:15–18:55 | Climb and swing right over Buda as the sun sets, Bastion in foreground, Parliament across the water |
-| 6 | Chain Bridge | Bird → Boat | 4:44–6:00 | 18:55–19:45 | Dive to the water, land about 200 m north of the bridge, pass under it as a boat |
+| 1 | Japanese Garden, Margaret Island | Glider | 0:00–1:42 | 17:30 | Rise from the ponds, clear the treeline, reveal the river, then a fast run down the island |
+| 2 | Margaret Bridge | Glider | 1:42–2:20 | 17:45 | Cross the bridge low, bank left toward Pest |
+| 3 | Parliament | Glider | 2:20–3:07 | 17:55–18:10 | The route arcs about 130° around the dome on the river side while the camera holds on it, then pulls back for the full facade |
+| 4 | Shoes on the Danube | Glider | 3:07–3:38 | 18:10 | Slow, low pass along the Pest bank |
+| 5 | Castle Hill and Fisherman's Bastion | Glider | 3:38–4:44 | 18:15–18:55 | Climb and swing right over Buda as the sun sets, Bastion in foreground, Parliament across the water |
+| 6 | Chain Bridge | Glider → Boat | 4:44–6:00 | 18:55–19:45 | Dive to the water, land about 200 m north of the bridge, pass under it as a boat |
 | 7 | Buda Castle and the Promenade | Boat | 6:00–7:03 | 19:45 | Castle towering above on the right, the Vigadó and the Promenade lit on the left, Elisabeth Bridge ahead |
 | 8 | Elisabeth Bridge and Gellért Hill | Boat | 7:03–7:53 | 20:00 | Under the bridge, Liberty Statue high on the right |
-| 9 | Liberty Bridge | Boat → Bird | 7:53–8:32 | 20:15 | Throttle up under the green ironwork, lift off just past it |
-| 10 | Central Market Hall | Bird | 8:32–9:29 | 20:20–20:30 | Climb and circle the tiled roof; the tour ends circling above it and loops after a pause |
+| 9 | Liberty Bridge | Boat → Glider | 7:53–8:32 | 20:15 | Throttle up under the green ironwork, lift off just past it |
+| 10 | Central Market Hall | Glider | 8:32–9:29 | 20:20–20:30 | Climb and circle the tiled roof; the tour ends circling above it and loops after a pause |
 
 **Modes**
 
-- *Bird*: altitude up to 180 m above the water. Over water it can come down to the surface; over land it stays at least 15 m above the floor (ground, buildings and bridge towers; see Corridor). Speed 8 to 25 m/s, free steering within a corridor 300 m either side of the route. Pitch and bank are visual only; the path is corridor-constrained.
+- *Glider*: altitude up to 180 m above the water. Over water it can come down to the surface; over land it stays at least 15 m above the floor (ground, buildings and bridge towers; see Corridor). Speed 8 to 25 m/s, free steering within a corridor 300 m either side of the route. Pitch and bank are visual only; the path is corridor-constrained.
 - *Boat*: on the water surface, speed 2 to 12 m/s (cruise 8 m/s), steering within the river polygon. Camera at about 1.5 m above water, slight bob and wake.
-- *Switch*: in bird mode over water, holding descend (Q) until altitude drops below 2 m triggers landing. In boat mode, holding throttle at max speed for 1 s triggers take-off, unless the boat is under or just before a bridge deck. Both are also keyframed into the autopilot.
+- *Switch*: in glider mode over water, holding descend (Q) until altitude drops below 2 m triggers landing. In boat mode, holding throttle at max speed for 1 s triggers take-off, unless the boat is under or just before a bridge deck. Both are also keyframed into the autopilot.
 
 **Control model**
 
 - Autopilot is the default state. Any steering input (keys, mouse drag, touch drag) blends control to the user over 0.5 s.
 - After 3 s without input, control blends back to autopilot over 2 s. Autopilot re-joins the spline from the current position rather than snapping; if the vehicle is in a different mode from the route at that point, autopilot runs the transition first (see Manual override).
-- Pause stops the autopilot and leaves the user in free control where they are: the boat idles to a stop, and the bird, which can't hover, circles at minimum speed until the user steers. Control never blends back while paused, and the sunset-run clock stops. Resuming hands control straight back to the autopilot (the 2 s blend, without the 3 s wait).
-- Keyboard: W/S speed, A/D steer, Q/E altitude (bird; Q descends), Space pause, T toggles the time slider, M turns the music on and off, 1–9 and 0 jump to beats 1–10 (through a short fade to black), Esc closes a card.
-- Touch (and mouse drag): sideways turns; up and down climbs or dives as the bird, and sets the speed as the boat (so a held drag up takes off).
+- Pause stops the autopilot and leaves the user in free control where they are: the boat idles to a stop, and the glider, which can't hover, circles at minimum speed until the user steers. Control never blends back while paused, and the sunset-run clock stops. Resuming hands control straight back to the autopilot (the 2 s blend, without the 3 s wait).
+- Keyboard: W/S speed, A/D steer, Q/E altitude (glider; Q descends), Space pause, T toggles the time slider, M turns the music on and off, 1–9 and 0 jump to beats 1–10 (through a short fade to black), Esc closes a card.
+- Touch (and mouse drag): sideways turns; up and down climbs or dives as the glider, and sets the speed as the boat (so a held drag up takes off).
 
 **Landmark cards**: when the camera is within a landmark's trigger radius and it is in frame, a small card slides in with the name and a two-line note. Clicking expands it to an illustration and a short paragraph. Cards never block the view and never pause the tour. One card shows at a time (rules under Landmark triggers).
 
@@ -102,10 +102,10 @@ All geometry comes from open data, processed once by offline scripts into static
 | Roads, tram lines, parks, trees | OSM `highway`, `railway=tram`, `leisure=park`, `natural=tree` | ODbL | Decals and instance point lists |
 | Boat route and piers | BKK GTFS open data (lines D11, D12, D14) | Open | Optional; pier positions for boat-mode stops |
 | Hero landmark meshes | Modelled in code from reference dimensions, on the OSM footprints and `bridges.json` (`tools/heroes/`) | Own work | `build-heroes`: one meshopt-compressed glb per landmark; their texture layers are painted with the facades |
-| Facade atlases, quays, roofs, hero layers | Procedural (`tools/textures/`, the current set), or the OpenAI image API, 1024×1024, tileable, flat lighting, from the style sheet | Own work (check API terms) | Packed by `pack-textures.ts`: array textures of 512² layers in WebP now; KTX2/Basis compression, mipmaps with the full-size set |
+| Facade atlases, quays, roofs, hero layers | The OpenAI image API (`gpt-image-2.5-sunburst`, the current set), each repainting its procedural texture (`tools/textures/`) as a layout guide with the style sheet attached, 1024×1024 or the layer's aspect, flat lighting; brought to the procedural level of colour, seams repainted where they show. Procedural alone without a key | API: the output is ours under OpenAI's Services Agreement; credited as AI-generated. Procedural: own work | Packed by `pack-textures.ts`: array textures of 512² layers in WebP now; KTX2/Basis compression, mipmaps with the full-size set |
 | Skydome panoramas | Procedural (the current set), or the OpenAI image API: 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | 2048×1024 WebP now; generated ones below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
 | Music | Four jazz tracks by Kevin MacLeod (incompetech.com): "Bossa Antigua" and "Backbay Lounge" by day, "Smooth Lovin" and "Night in Venice" by night | CC BY 4.0, credit in the About overlay | `npm run audio` (macOS: afconvert): trimmed, levelled to -19.5 LUFS (BS.1770), AAC at 128 kb/s in `public/data/audio/` |
-| Landmark illustrations | Rendered from the scene, one per landmark, at a set viewpoint and hour (`?record=cards`); the OpenAI image API, style sheet as reference, later | Own work | `npm run cards`: a painted finish, 720×450 WebP, shown in cards |
+| Landmark illustrations | Rendered from the scene, one per landmark, at a set viewpoint and hour (`?record=cards`), then repainted by the image API as an illustration in the style sheet's style (the current set; the render fixes the composition) | API output credited as AI-generated; the renders are own work | `npm run cards -- --api`: the repaint (without `--api`, a painted finish on the render), 720×450 WebP, shown in cards |
 
 **Pipeline scripts** (`tools/`, TypeScript run with tsx, run once and committed outputs; `npm run build-world` runs steps 2 to 8 in order):
 
@@ -115,9 +115,9 @@ All geometry comes from open data, processed once by offline scripts into static
 4. `build-bridges.ts`: deck outlines, piers and pylons from OSM, with hand-set deck heights and styles; writes `bridges.json`.
 5. `build-heroes.ts`: models the landmarks in code (`tools/heroes/`) on their OSM footprints and the bridges' decks, towers and cable curves; writes `heroes/<id>.glb`, and lists the cells each hero stands on for the next two steps.
 6. `build-city.ts`: projects, extrudes, assigns district and one of eight facade styles (by type, district and height) and a roof kind, writes `city.glb` and `trees.json`; leaves out the buildings a hero replaces (`osm` in `landmarks.json`) or stands on.
-7. `build-floor.ts`: combines the terrain, building and hero heights, tree crowns and bridge towers into `floor.bin`, a 5 m height grid for the bird's altitude floor. Bridge decks stay out of the grid: the runtime tests the deck outlines directly.
+7. `build-floor.ts`: combines the terrain, building and hero heights, tree crowns and bridge towers into `floor.bin`, a 5 m height grid for the glider's altitude floor. Bridge decks stay out of the grid: the runtime tests the deck outlines directly.
 8. `build-life.ts`: traces the tram lines along both embankments from the OSM tram ways; writes `life.json`.
-9. `gen-textures.ts` (M3): paints the texture set and the style sheet, writes lossless PNGs to `assets/raw/`. The default is procedural (deterministic and offline); with `--api` it prompts the image API with the style sheet attached. `pack-textures.ts` then packs `assets/raw/` into `public/data/tex/` (WebP at the fallback sizes now; KTX2 later). `npm run textures` runs both.
+9. `gen-textures.ts` (M3): paints the texture set and the style sheet, writes lossless PNGs to `assets/raw/`. The default is procedural (deterministic and offline); with `--api` (the committed set) it prompts the image API with each procedural texture as a layout guide and the style sheet attached. `--dry` lists the requests and their cost first. Answers are kept in `assets/raw/api/`, keyed by a hash of the request, so a rerun only asks for what's missing or changed. `--budget` caps the total, which is kept across runs. `pack-textures.ts` then packs `assets/raw/` into `public/data/tex/` (WebP at the fallback sizes now; KTX2 later). `npm run textures` runs both.
 10. `audio.ts` (after M4): decodes the music's originals from `tools/out/audio/` (downloaded by hand, not committed), trims the silence at the ends, measures each track's loudness and writes the gain that levels it and its length into `audio.json`, and encodes it as an .m4a. `npm run audio`.
 
 The autopilot spline and its beat keyframes are built at load from the hand-edited `route.json`; `npm run timetable` prints the beat timetable (each beat's start time from arc length and speed) used in the route table above.
@@ -127,8 +127,9 @@ The autopilot spline and its beat keyframes are built at load from the hand-edit
 - Generate a single style-sheet image first (a riverside street in the target style, flat midday light). Attach it to every later prompt.
 - All surface textures are lighting-neutral: flat, even light, no shadows, no sky colour, no time of day in the prompt.
 - Facades come in pairs: `facade_X_day.png` and `facade_X_lit.png` (same facade, windows glowing). The lit one is stored as the emissive layer, black wherever nothing glows (an API-generated night version has the day one subtracted). The runtime crossfades it window by window.
-- A facade is one tile of exactly 4 bays by 4 storeys (3.4 m each), one window per bay and storey: the bottom row is the ground floor, and the three rows above must repeat when stacked. Facades and roofs are near-white detail; the runtime tints them with each building's colour.
-- Request tileable output and verify seams with a quick 2×2 tile check before accepting.
+- A facade is one tile of exactly 4 bays by 4 storeys (3.4 m each), one window per bay and storey: the bottom row is the ground floor, and the three rows above must repeat when stacked. The model doesn't keep to a grid it's only told about, so every texture repaints its procedural twin, drawn to the grid, as a layout guide (without one, a surface can come back as the style sheet's whole scene).
+- Facades, roofs and hero layers are near-white detail; the runtime tints them with each building's or face's colour. The model paints in colour, so each texture is scaled channel by channel to its procedural twin's level.
+- The API can't make a tile, though a guided answer often does. Where a seam stands out, shift the texture by half a tile (by whole bays and storeys, so the windows keep their grid; facades only sideways), repaint a band over the seam with a masked edit, and blend the band back. A repaint that strays from the surface is asked once more. Verify with the 2×2 tile check before accepting.
 - Keep prompts in `tools/prompts/` so textures can be regenerated consistently.
 
 **Attribution**: an "About" overlay credits OpenStreetMap contributors (ODbL), Copernicus and the music (CC BY 4.0: title, artist, licence, and a note that the tracks are trimmed and re-encoded), opened from a small "© OpenStreetMap contributors" credit that is always visible in the bottom bar. This is mandatory for OSM-derived data. The OSM extracts committed to the repo (raw GeoJSON under `tools/` and the JSON derived from it) are themselves an ODbL database, so they carry an ODbL licence note.
@@ -149,7 +150,7 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `autopilot` | Advances a parameter along the spline at the keyframed speed; emits mode-switch and card events; advances the clock in the sunset run | route, clock | target pose, mode request, time of day |
 | `input` | Normalises keyboard, mouse drag and touch into a steering vector and buttons; reports last-input time | DOM events | steer, throttle, climb, pause |
 | `controller` | Blends autopilot and manual targets by a weight that ramps 0 to 1 over 0.5 s on input, and back to 0 over 2 s after 3 s without input; owns the mode state machine and the mode rule on hand-back | autopilot, input | vehicle target, mode |
-| `vehicle` | Integrates position and velocity for bird or boat with per-mode limits; clamps to the corridor and altitude floor, or the river polygon; computes bank and pitch | controller target, river polygon, floor grid | pose |
+| `vehicle` | Integrates position and velocity for glider or boat with per-mode limits; clamps to the corridor and altitude floor, or the river polygon; computes bank and pitch | controller target, river polygon, floor grid | pose |
 | `camera` | Third-person rig behind the vehicle with per-mode offsets, camera keys (1.5 s blends between camera modes), and the landing/take-off blend | vehicle pose, route camera keys | three.js camera |
 | `cards` | Landmark card triggers: radius, view cone, one at a time, once per pass | vehicle pose, camera, landmarks | current card |
 | `tour` | The loop and the beat jumps, both cut through black | autopilot, keys | fade, reset |
@@ -157,10 +158,10 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `lighting` | Sun and moon directional lights, hemisphere light, the sky dome (`sky`), fog, exposure and bloom curves, the shared night ramp; every curve keyed to sun elevation | time of day | light state |
 | `hud` | Bottom bar, time slider, mode badge, music button, OSM credit, landmark cards, about overlay | state | DOM |
 | `audio` | The music: off until turned on from a user gesture (remembered); two streamed media elements crossfading over 6 s into the next track for the light (day tracks until dusk, night tracks after); a Web Audio gain for the volume and a safety limiter; pauses with a hidden tab | audio.json, night ramp | sound |
-| `effects` | Boat wake, splash on landing, foam, birds, ambient boats and trams | vehicle pose, mode | scene objects |
+| `effects` | Boat wake, splash on landing, foam, gulls, ambient boats and trams | vehicle pose, mode | scene objects |
 | `render` | Renderer, the planar reflection pass, post-processing (bloom, tone mapping, `post`), resize, quality tiers and the frame-time probe (`quality`) | scene, camera | frame |
 
-**Mode state machine**: `BIRD` → `LANDING` → `BOAT` → `TAKEOFF` → `BIRD`. Landing starts when altitude drops below 2 m over water with downward velocity (manual) or on a keyframe (autopilot); it runs for 2 s during which the vehicle decelerates to boat speed and the camera lowers. Take-off is the mirror, 2.5 s, and never starts under a bridge deck or within 30 m before one. Inputs during a transition are ignored.
+**Mode state machine**: `GLIDER` → `LANDING` → `BOAT` → `TAKEOFF` → `GLIDER`. Landing starts when altitude drops below 2 m over water with downward velocity (manual) or on a keyframe (autopilot); it runs for 2 s during which the vehicle decelerates to boat speed and the camera lowers. Take-off is the mirror, 2.5 s, and never starts under a bridge deck or within 30 m before one. Inputs during a transition are ignored.
 
 **Key data files**
 
@@ -168,7 +169,7 @@ The Controller is the only module that knows about both autopilot and the user; 
 - `landmarks.json`: `{id, name, position, triggerRadius, model, height?, base?, note, text, illustration, osm?}`; `model` is the hero's glb, `height` sets the aim point (half way up) and the label, `note` is the card's two lines and `text` its paragraph, and `osm` lists the OSM buildings the hero replaces.
 - `audio.json`: the music, hand-edited: `{file, original, title, artist, licence, licenceUrl, source, light, gain, seconds}`; `light` is `day` or `night`, and `npm run audio` writes `gain` and `seconds`.
 - `quality.json`: three tiers (low, medium, high) setting the pixel-ratio cap, shadow map size, planar reflections and their resolution, bloom, MSAA, the share of trees, anisotropy and ambient life; plus the start tier for desktop and touch devices and the probe's settings.
-- `floor.bin`: the bird's altitude-floor grid, written by `build-floor.ts`. `terrain.bin` and `floor.bin` share one format: a JSON header and typed-array layers, zlib-compressed.
+- `floor.bin`: the glider's altitude-floor grid, written by `build-floor.ts`. `terrain.bin` and `floor.bin` share one format: a JSON header and typed-array layers, zlib-compressed.
 - Written by the pipeline, read at load: `river.json`, `bridges.json`, `trees.json`, `terrain.bin`, `city.glb`, `water.glb`, `heroes/*.glb`, `life.json`.
 
 **Coordinate helpers** (`src/geo.ts`): `lonLatToLocal(lon, lat)` and back, so hand-edited route points can be written in lat/lon and converted at load time.
@@ -220,7 +221,7 @@ Reference for Budapest on 1 October (CEST):
 
 **Beats.** Ten named beats sit on the spline at arc-length positions; their start times follow from the distances and speeds between them. Camera keys on route points (most of them at beat starts) set a camera mode until the next key:
 
-- `follow` (default): camera 12 m behind and 4 m above the bird, 6 m behind and 1.5 m above the boat, smoothed with a critically damped spring (0.4 s).
+- `follow` (default): camera 12 m behind and 4 m above the glider, 6 m behind and 1.5 m above the boat, smoothed with a critically damped spring (0.4 s).
 - `orbit`: the camera stays on the vehicle's rig but aims at a target landmark (the Parliament dome, Buda Castle, the Liberty Statue, the Market Hall) while the spline arcs around or past it. The rig swings round the vehicle only as far as it takes to keep the target within 34° of it (at most 75° from straight behind) and aims between the two, so the vehicle never leaves the frame.
 - `reveal`: camera lags further behind and higher, then catches up by the next key, used for the first climb and the Market Hall finish.
 - `low`: camera drops to just above the vehicle, used under bridges. It switches on by itself whenever the vehicle is passing under a deck, in manual flight too.
@@ -229,21 +230,21 @@ Changes between camera modes blend over 1.5 s.
 
 Beats never move the vehicle; they only move the camera around it. This keeps manual override simple: the vehicle is always where the user expects.
 
-**Manual override.** Input sets a manual target (steer, throttle, climb) applied to the vehicle directly. The controller's blend weight `w` ramps from 0 to 1 over 0.5 s on first input and holds while input continues; after 3 s without input it ramps back to 0 over 2 s. The vehicle target is `lerp(autopilotTarget, manualTarget, w)`. While `w` > 0, the autopilot parameter `s` is re-derived from the vehicle's nearest point on the spline, searched only within 300 m of arc length around the current `s`: the route passes close to itself over Buda and at the Market Hall, and a global search would snap backwards. When control returns, the autopilot continues from where the user actually is. If the vehicle's mode doesn't match the route's mode at that point, autopilot runs the transition first: it takes off at once if the route says bird, or flies back to the route and lands if the route says boat (boat stretches of the route are always on water). Camera keys are suspended while `w` > 0.5 and resume at the next camera key.
+**Manual override.** Input sets a manual target (steer, throttle, climb) applied to the vehicle directly. The controller's blend weight `w` ramps from 0 to 1 over 0.5 s on first input and holds while input continues; after 3 s without input it ramps back to 0 over 2 s. The vehicle target is `lerp(autopilotTarget, manualTarget, w)`. While `w` > 0, the autopilot parameter `s` is re-derived from the vehicle's nearest point on the spline, searched only within 300 m of arc length around the current `s`: the route passes close to itself over Buda and at the Market Hall, and a global search would snap backwards. When control returns, the autopilot continues from where the user actually is. If the vehicle's mode doesn't match the route's mode at that point, autopilot runs the transition first: it takes off at once if the route says glider, or flies back to the route and lands if the route says boat (boat stretches of the route are always on water). Camera keys are suspended while `w` > 0.5 and resume at the next camera key.
 
-**Corridor.** The bird is clamped to 300 m lateral distance from the spline, never closer than 50 m to the edge of the world, and to at most 180 m above the water. The lower limit comes from the floor grid (`floor.bin`, 5 m cells holding the highest of terrain, building tops, tree crowns and bridge towers): over land the bird stays at least 15 m above it (4 m above a tree crown), and over water the floor is the surface. Bridge decks are tested against their outlines, so the bird passes under a bridge if it arrives below the deck and over it otherwise. Pushing against a limit slows and turns the vehicle back (or lifts it, at the floor) rather than stopping it. The boat is clamped inside the river polygon with a 5 m margin, tested by a 2D point-in-polygon check each frame.
+**Corridor.** The glider is clamped to 300 m lateral distance from the spline, never closer than 50 m to the edge of the world, and to at most 180 m above the water. The lower limit comes from the floor grid (`floor.bin`, 5 m cells holding the highest of terrain, building tops, tree crowns and bridge towers): over land the glider stays at least 15 m above it (4 m above a tree crown), and over water the floor is the surface. Bridge decks are tested against their outlines, so the glider passes under a bridge if it arrives below the deck and over it otherwise. Pushing against a limit slows and turns the vehicle back (or lifts it, at the floor) rather than stopping it. The boat is clamped inside the river polygon with a 5 m margin, tested by a 2D point-in-polygon check each frame.
 
-**Landing (bird to boat), 2.0 s.**
+**Landing (glider to boat), 2.0 s.**
 
 1. Trigger: altitude below 2 m over water with vertical speed negative (manual), or a `mode: boat` keyframe (autopilot).
 2. Vehicle: speed eases from current to boat cruise (8 m/s); altitude eases to 0; pitch eases to level.
-3. Camera: offset eases from bird follow to boat follow; field of view narrows from 70 to 60 degrees.
-4. Effects: at t = 0.6 s a splash ring and foam decal spawn; the wake starts at t = 1.0 s; the bird mesh morphs or swaps to the boat mesh behind the splash.
+3. Camera: offset eases from glider follow to boat follow; field of view narrows from 70 to 60 degrees.
+4. Effects: at t = 0.6 s a splash ring and foam decal spawn; the wake starts at t = 1.0 s; the glider mesh morphs or swaps to the boat mesh behind the splash.
 5. Inputs ignored for the duration; HUD badge switches at t = 1.0 s.
 
-**Take-off (boat to bird), 2.5 s.** The mirror: triggered by holding throttle at max for 1 s or a `mode: bird` keyframe, but never under a bridge deck or within 30 m before one (the trigger waits until the boat is clear); speed rises to bird cruise (15 m/s), altitude rises to 25 m on an ease-out, the wake fades, the camera widens. A short spray burst at t = 0.3 s.
+**Take-off (boat to glider), 2.5 s.** The mirror: triggered by holding throttle at max for 1 s or a `mode: glider` keyframe, but never under a bridge deck or within 30 m before one (the trigger waits until the boat is clear); speed rises to glider cruise (15 m/s), altitude rises to 25 m on an ease-out, the wake fades, the camera widens. A short spray burst at t = 0.3 s.
 
-**Mesh.** V1 uses one stylized vehicle with two states: a bird (gull-like, low-poly) and a small boat. A simple crossfade behind the splash is enough; a morph is a stretch goal.
+**Mesh.** V1 uses one stylized vehicle with two states: a glider (a white low-poly sailplane with red wingtips and a red T-tail, and navigation lights that brighten at night) and a small boat. A simple crossfade behind the splash is enough; a morph is a stretch goal.
 
 **Landmark triggers.** Each landmark has a trigger radius (150 to 500 m; the landmarks on the banks need the most, since the boat runs mid-river). When the vehicle is inside it and the landmark is within 40 degrees of the camera forward vector, the HUD shows its card. One card shows at a time, for 8 s; where radii overlap (Parliament, the Shoes, the Bastion and the Chain Bridge), the landmark nearest the centre of the view wins and the others can show once it has gone, if they still qualify. Each card shows once per pass: it can show again only after the vehicle has left its trigger radius, so a long arc around a landmark does not re-trigger it.
 
@@ -302,10 +303,10 @@ Each gate is a yes/no check on a running build; the next phase does not start un
 ## Open questions
 
 - [x] Hero models: modelled in code (`tools/heroes/`) on the OSM footprints, rather than in Blender or with an image-to-3D tool: neither was available, and models in code are deterministic, reviewable and fit their sites exactly. Any one can still be replaced by a hand-made glb.
-- [ ] Vehicle: a bird, a small plane, or an abstract glider? The bird fits the city; a glider is easier to animate. Decide before M0 ends.
-- [ ] Narration: text cards only in V1, or add generated voice-over per beat? Affects beat durations.
-- [ ] Image API terms: confirm generated textures can be redistributed in a public build.
+- [x] Vehicle: a glider. A white sailplane that lands on the Danube and carries on as a boat, as the bird did; the bird of M0–M4 was replaced after M4. It can't hover either, so the opening two seconds glide straight on over the Japanese Garden, and paused it circles.
+- [x] Narration: text cards only in V1. No voice-over, so the beat durations stand.
+- [x] Image API terms: OpenAI's Services Agreement gives the customer ownership of the output, and nothing in the terms stops redistributing it in a public build and repository. The site credits the textures and illustrations as AI-generated (the terms forbid passing output off as human-made). The outputs' C2PA credentials don't survive our re-encoding, which the terms don't require keeping. The key stays in a git-ignored `.env.local`, used only by `tools/`.
 - [x] Planar reflections on medium tier: keep, but only near the two money shots (Parliament and the Chain Bridge); probe and light streaks everywhere else.
-- [ ] Season: the DEM and sun are set for 1 October. Should the trees carry autumn colour, or stay neutral green?
+- [x] Season: autumn, to match the 1 October sun. Three quarters of the trees have turned (gold, orange, rust and brown) and a quarter are still green; the grass is a tired olive and the woods' floor leaf litter.
 - [x] Ambient life (trams, boats, birds): in V1, kept simple: six trams on both embankments, two tour boats, gulls over the river; off on the low tier.
 - [x] Audio: music only. Four jazz tracks by Kevin MacLeod under CC BY 4.0, which allows hosting them in a public build with a credit; an `audio` module, a music button (browsers block sound until the user interacts, and the tour runs without input) and a 20 MB on-demand slot in the budget. The landing and take-off cues were tried as synthesised wind, water and city sounds and dropped: music only.

@@ -1,4 +1,4 @@
-// Effects and ambient life: the boat's wake and foam, the splash ring and spray when the bird
+// Effects and ambient life: the boat's wake and foam, the splash ring and spray when the glider
 // lands and the burst when the boat takes off, flocks of gulls over the river, two tour boats
 // on loops up and down it, and the trams along both embankments (life.json). Everything is
 // created once; per frame only positions, counts and fades change, so nothing recompiles.
@@ -237,7 +237,7 @@ class Spray {
   private readonly life = new Float32Array(SPRAY_MAX);
   private readonly age = new Float32Array(SPRAY_MAX).fill(Infinity);
   private next = 0;
-  private lastMode = "BIRD";
+  private lastMode = "GLIDER";
   private lastT = 0;
   private ringAge = Infinity;
   private seed = 1;

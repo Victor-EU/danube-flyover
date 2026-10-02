@@ -134,11 +134,11 @@
     "night": "sky_night.webp"
   },
   "bytes": {
-    "surfaces_day.webp": 169492,
-    "surfaces_lit.webp": 78998,
-    "heroes_day.webp": 194568,
-    "heroes_lit.webp": 54606,
-    "quay.webp": 11298,
+    "surfaces_day.webp": 678812,
+    "surfaces_lit.webp": 194372,
+    "heroes_day.webp": 706838,
+    "heroes_lit.webp": 116646,
+    "quay.webp": 57030,
     "water_normal.webp": 52872,
     "sky_dawn.webp": 29604,
     "sky_day.webp": 28966,

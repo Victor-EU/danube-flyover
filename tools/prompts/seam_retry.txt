@@ -1,0 +1,1 @@
+This is a flat surface texture, not a picture: the band is the same surface as the rest of the image, so paint it with the same material and pattern only. No scenery, buildings, water, sky, figures or new objects in it.

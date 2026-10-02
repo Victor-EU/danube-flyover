@@ -1,0 +1,1 @@
+Facade texture for one landmark building, exactly {bays} window bays wide and {rows} storeys high, filling the image edge to edge: {width} metres wide and {height} metres tall. One window centred in each bay of each storey, the same in every bay. It must repeat seamlessly side to side and top to bottom, so nothing is cut at the edges except wall that continues.

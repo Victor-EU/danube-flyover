@@ -7,7 +7,7 @@ import { CatmullRomCurve3, Vector3 } from "three";
 import { headingOf, lonLatToLocal, wrapAngle } from "./geo";
 import type { CameraMode } from "./state";
 
-export type RouteMode = "bird" | "boat";
+export type RouteMode = "glider" | "boat";
 
 export interface RoutePointJson {
   lat: number;
@@ -195,20 +195,20 @@ export class Route {
     return [i, f - i];
   }
 
-  sample(s: number, out: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "bird" }): RouteSample {
+  sample(s: number, out: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "glider" }): RouteSample {
     const [i, u] = this.index(s);
     out.x = this.px[i] + (this.px[i + 1] - this.px[i]) * u;
     out.y = this.py[i] + (this.py[i + 1] - this.py[i]) * u;
     out.z = this.pz[i] + (this.pz[i + 1] - this.pz[i]) * u;
     out.heading = this.heading[i] + wrapAngle(this.heading[i + 1] - this.heading[i]) * u;
     out.speed = this.speed[i] + (this.speed[i + 1] - this.speed[i]) * u;
-    out.mode = this.boat[u < 0.5 ? i : i + 1] ? "boat" : "bird";
+    out.mode = this.boat[u < 0.5 ? i : i + 1] ? "boat" : "glider";
     return out;
   }
 
   modeAt(s: number): RouteMode {
     const [i, u] = this.index(s);
-    return this.boat[u < 0.5 ? i : i + 1] ? "boat" : "bird";
+    return this.boat[u < 0.5 ? i : i + 1] ? "boat" : "glider";
   }
 
   /**

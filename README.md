@@ -1,22 +1,24 @@
 # Danube Flyover
 
-A browser-based 3D flight along the Budapest riverfront: a bird from the Japanese Garden on Margaret Island to the Central Market Hall, landing on the Danube to continue as a boat. See [the design doc](<Danube Flyover — Design Doc.md>) and [the decisions log](docs/decisions.md).
+A browser-based 3D flight along the Budapest riverfront: a glider from the Japanese Garden on Margaret Island to the Central Market Hall, landing on the Danube to continue as a boat. See [the design doc](<Danube Flyover — Design Doc.md>) and [the decisions log](docs/decisions.md).
 
-This is **M4, heroes**, plus the music, on top of M3's lighting, M2's autopilot, M1's geography and the M0 grey box:
+This is **M4, heroes**, plus what came after it, on top of M3's lighting, M2's autopilot, M1's geography and the M0 grey box:
 
+- the glider: a white sailplane (it replaced M0's bird), with navigation lights at night;
+- autumn: three quarters of the trees have turned, and the grass is olive;
 - music: four jazz tracks by Kevin MacLeod (CC BY 4.0), off until you turn it on, day tracks at golden hour and night tracks after dusk;
 - the ten hero landmarks, modelled in code on their real footprints: Parliament, the Chain, Margaret, Elisabeth and Liberty Bridges, Fisherman's Bastion and Matthias Church, Buda Castle, the Liberty Statue, the Gellért Hotel and the Central Market Hall; plus the Academy, Gresham Palace, the Vigadó, the Citadella and the Shoes on the Danube;
 - effects: the boat's wake and foam, the landing splash and the take-off spray;
 - ambient life: two tour boats, trams on both embankments, gulls over the river;
 - quality tiers (high, medium, low), chosen by device and a 2 s frame-time probe, or in the About overlay;
 - the mobile pass: touch steering (and take-off), a wider view on phones held upright, a golden-hour still where WebGL2 is missing;
-- landmark cards that open to an illustration (a render of the scene) and a paragraph;
+- landmark cards that open to an illustration (a render of the scene, repainted by the image API) and a paragraph;
 - from M3: the painted sky, textured city, night lights, the water's reflections and streaks, bloom and tone mapping;
 - from M2: camera shots along the route, landmark cards, pause, beat jumps and the loop;
 - from M1: the real city from OpenStreetMap, terrain from Copernicus GLO-30, the river, the five bridges and 16,000 trees;
-- from M0: the route and its autopilot, the bird and the boat, the landing and take-off, manual control with hand-back, and the time-of-day slider.
+- from M0: the route and its autopilot, the vehicle and the boat, the landing and take-off, manual control with hand-back, and the time-of-day slider.
 
-The textures and illustrations are procedural or rendered stand-ins for the design's image-API set (see `docs/decisions.md`, M3 and M4).
+The building and landmark textures and the card illustrations are AI-generated with OpenAI's image API, repainted from the procedural textures and from renders of the scene; the skies and the water are procedural. See `docs/decisions.md`.
 
 ## Run it
 
@@ -42,12 +44,12 @@ To record the run, open the dev server with `?record=timelapse` (the whole tour 
 - **Steer** with any of these to take control from the autopilot:
   - W/S: speed
   - A/D: turn
-  - Q/E: down/up (bird)
-  - or drag (touch or mouse): sideways turns; up and down climbs or dives as the bird, and sets the speed as the boat
+  - Q/E: down/up (glider)
+  - or drag (touch or mouse): sideways turns; up and down climbs or dives as the glider, and sets the speed as the boat
 - **Hand-back:** 3 s without input hands control back to the autopilot over 2 s. If the route has changed mode meanwhile, the autopilot takes off, or flies back and lands, first.
 - **Land:** hold Q over the water until you're below 2 m.
 - **Take off:** hold W (or drag up) at the boat's top speed for 1 s.
-- **Space** (or the bar's button) pauses: you keep control, the boat idles and the bird circles. Resuming hands back to the autopilot.
+- **Space** (or the bar's button) pauses: you keep control, the boat idles and the glider circles. Resuming hands back to the autopilot.
 - **1–9 and 0** jump to the ten beats.
 - **Cards:** click one to open it, and **Esc** or × to close it.
 - **M** (or the bar's speaker button) turns the music on and off; the About overlay sets its volume. Browsers block sound until you interact with the page, so it starts off; once turned on, it's remembered, and starts with your first click or key on the next visit.
@@ -77,11 +79,33 @@ npm run build-world  # 2-8. everything below, in order (about 15 s, deterministi
 | 4 | `build-bridges.ts` | `bridges.json`: deck outlines, piers and towers from OSM, with hand-set heights and styles |
 | 5 | `build-heroes.ts` | `heroes/<id>.glb`: the landmarks, modelled in code in `tools/heroes/`; `-- <id>` builds one |
 | 6 | `build-city.ts` | `city.glb`: buildings merged per district, and ponds; `trees.json` |
-| 7 | `build-floor.ts` | `floor.bin`: the bird's 5 m altitude-floor grid |
+| 7 | `build-floor.ts` | `floor.bin`: the glider's 5 m altitude-floor grid |
 | 8 | `build-life.ts` | `life.json`: the tram lines along both embankments |
 | 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface and hero array textures, quay, water normal map and skies; and `docs/style-sheet.webp` |
 
-`gen-textures` is procedural by default. With `-- --api` and `OPENAI_API_KEY` set it takes the design's image-API path instead (prompts in `tools/prompts/`; untested so far).
+`gen-textures` is procedural by default, offline and deterministic. The committed set is the image-API one, below. A plain `npm run textures` replaces it with the procedural set.
+
+### The image-API set
+
+The committed textures and card illustrations come from OpenAI's image API (`gpt-image-2.5-sunburst` at "high"). The style sheet is attached to every request. Each texture repaints its procedural twin as a layout guide, and each card repaints its scene render. Put the key in a git-ignored `.env.local` at the repo root, and never in the code or the chat:
+
+```bash
+echo 'OPENAI_API_KEY=sk-...' > .env.local
+npm run gen-textures -- --api --dry --budget 20   # lists what it would ask for and the cost
+npm run gen-textures -- --api --budget 20         # the style sheet, facades, roofs, quay and hero layers
+npm run pack-textures
+# then record the card renders with the new textures: open the dev server at /?record=cards
+npm run cards -- --api --budget 20
+```
+
+How a run works:
+
+- **Cache:** every answer is kept in `assets/raw/api/<name>-<key>.png`, keyed by a hash of everything sent. A rerun only asks for what's missing or changed, and `--force` asks again. Keep a copy of that folder: it isn't committed (177 MB), and without it a rerun pays again and paints different images.
+- **Budget:** `spent.json` there totals what every answer cost, across runs and tools. `--budget <usd>` (or `OPENAI_IMAGE_BUDGET`) stops a run before a request could take the total over.
+- **Seams:** a seam is repaired only where it stands out, and a repair that strays from the surface is asked once more. Check `assets/raw/check/` (each texture tiled 2 × 2) before packing.
+- **Options:** `--only <name>` limits a run, and `OPENAI_IMAGE_QUALITY=low` makes a cheap trial pass.
+
+The committed set is 71 answers. With the trials and redos, making it cost $7.68.
 
 `landmarks.json`, `route.json`, `quality.json` and `audio.json` are hand-edited and never generated (`npm run audio` fills in each track's `gain` and `seconds`).
 
@@ -103,7 +127,7 @@ The music isn't part of `build-world`. To change it, download the originals into
   - `tools/heroes/` models the landmarks: `kit.ts` is the modelling kit, `bridgeKit.ts` the bridges' shared parts.
   - `tools/osm/` and `tools/dem/` hold the committed source extracts.
   - `tools/textures/` paints the texture set; `tools/prompts/` holds the image-API prompts.
-  - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers.
+  - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers (`imageApi.ts`: the client, its cache and costs); `tools/textures/api.ts` plans the API texture set and fixes its seams.
   - `tools/capturePlugin.ts` is the dev server's frame capture endpoint.
 
 ## Credits

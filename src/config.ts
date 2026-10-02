@@ -2,7 +2,7 @@
 
 const deg = (d: number) => (d * Math.PI) / 180;
 
-export const BIRD = {
+export const GLIDER = {
   minSpeed: 8,
   maxSpeed: 25,
   cruise: 15,
@@ -54,7 +54,7 @@ export const WORLD = {
   latMax: 47.541,
   lonMin: 19.026,
   lonMax: 19.074,
-  /** The bird stays at least this far inside the world edge. */
+  /** The glider stays at least this far inside the world edge. */
   edgeMargin: 50,
   landBase: 4,
   quayHeight: 4.5,
@@ -62,20 +62,20 @@ export const WORLD = {
 };
 
 export const CAMERA = {
-  bird: { back: 12, up: 4, fov: 70 },
+  glider: { back: 12, up: 4, fov: 70 },
   boat: { back: 6, up: 1.5, fov: 60 },
   smoothTime: 0.4,
   /** Changes between camera modes blend over this long. */
   blend: 1.5,
   /** `low`, under bridge decks: just above the vehicle. */
-  low: { bird: { back: 8.5, up: 1.2 }, boat: { back: 4.5, up: 0.7 } },
+  low: { glider: { back: 8.5, up: 1.2 }, boat: { back: 4.5, up: 0.7 } },
   /** `reveal` starts this far behind and above, and catches up by the next camera key. */
   reveal: { back: 55, up: 22 },
   /**
    * `orbit` swings the rig around the vehicle so the target stays within `frame` of it
    * (both on screen), but never more than `maxSwing` from straight behind.
    */
-  orbit: { bird: { back: 18, up: 6 }, boat: { back: 11, up: 2.6 }, frame: deg(34), maxSwing: deg(75) },
+  orbit: { glider: { back: 18, up: 6 }, boat: { back: 11, up: 2.6 }, frame: deg(34), maxSwing: deg(75) },
 };
 
 export const CARDS = {
@@ -98,8 +98,8 @@ export const LOOP = {
 export const JUMP = { fadeOut: 0.3, fadeIn: 0.5 };
 
 export const PAUSE = {
-  /** The bird, which can't hover, circles at this radius while paused. */
-  birdRadius: 60,
+  /** The glider, which can't hover, circles at this radius while paused. */
+  gliderRadius: 60,
 };
 
 /** The sunset-run clock eases toward the route's clock with this time constant (s). */

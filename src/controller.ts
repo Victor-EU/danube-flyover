@@ -1,9 +1,9 @@
 // The only module that knows about both the autopilot and the user. It blends their commands
-// by the weight `w` and owns the mode state machine: BIRD → LANDING → BOAT → TAKEOFF → BIRD.
-// Pause hands the vehicle to the user and keeps it there: the boat idles and the bird, which
+// by the weight `w` and owns the mode state machine: GLIDER → LANDING → BOAT → TAKEOFF → GLIDER.
+// Pause hands the vehicle to the user and keeps it there: the boat idles and the glider, which
 // can't hover, circles at minimum speed until the user steers.
 
-import { BIRD, BOAT, CONTROL, PAUSE, TRANSITION } from "./config";
+import { GLIDER, BOAT, CONTROL, PAUSE, TRANSITION } from "./config";
 import { forwardOf } from "./geo";
 import type { Mode, State } from "./state";
 import type { World } from "./world/world";
@@ -21,7 +21,7 @@ export function updateController(st: State, world: World, dt: number): void {
   if (inp.active || st.paused) {
     if (inp.active) c.idleFor = 0;
     c.w = Math.min(1, c.w + dt / CONTROL.blendIn);
-    ap.holdLeft = 0; // steering (or pausing) cancels the opening hover
+    ap.holdLeft = 0; // steering (or pausing) cancels the opening glide
   } else {
     c.idleFor += dt;
     if (c.idleFor > CONTROL.idleBeforeReturn) c.w = Math.max(0, c.w - dt / CONTROL.blendOut);
@@ -29,16 +29,16 @@ export function updateController(st: State, world: World, dt: number): void {
 
   const transitioning = v.mode === "LANDING" || v.mode === "TAKEOFF";
   const boat = v.mode === "BOAT";
-  const maxYaw = boat ? BOAT.maxYawRate : BIRD.maxYawRate;
+  const maxYaw = boat ? BOAT.maxYawRate : GLIDER.maxYawRate;
   // Inputs are ignored during a transition.
   let mYaw = transitioning ? 0 : inp.steer * maxYaw;
-  let mAccel = transitioning ? 0 : inp.throttle * (boat ? BOAT.accel : BIRD.accel);
-  const mClimb = transitioning || boat ? 0 : inp.climb * (inp.climb < 0 ? BIRD.maxDive : BIRD.maxClimb);
+  let mAccel = transitioning ? 0 : inp.throttle * (boat ? BOAT.accel : GLIDER.accel);
+  const mClimb = transitioning || boat ? 0 : inp.climb * (inp.climb < 0 ? GLIDER.maxDive : GLIDER.maxClimb);
   if (st.paused && !transitioning) {
-    // Idle without input: slow to the minimum (a stop, for the boat); the bird keeps
+    // Idle without input: slow to the minimum (a stop, for the boat); the glider keeps
     // circling the way it was already turning.
-    if (inp.throttle === 0) mAccel = -(boat ? BOAT.accel : BIRD.accel);
-    if (inp.steer === 0 && !boat) mYaw = (Math.sign(v.yawRate) || 1) * Math.min(maxYaw, v.speed / PAUSE.birdRadius);
+    if (inp.throttle === 0) mAccel = -(boat ? BOAT.accel : GLIDER.accel);
+    if (inp.steer === 0 && !boat) mYaw = (Math.sign(v.yawRate) || 1) * Math.min(maxYaw, v.speed / PAUSE.gliderRadius);
   }
   const a = ap.command;
   c.command.yawRate = lerp(a.yawRate, mYaw, c.w);
@@ -47,11 +47,11 @@ export function updateController(st: State, world: World, dt: number): void {
 
   const autopilotDriving = c.w < 0.5 && ap.holdLeft <= 0 && !st.paused;
   switch (v.mode) {
-    case "BIRD": {
+    case "GLIDER": {
       const overWater = world.river.isWater(v.x, v.z);
       // The 2 m rule is for manual flight; the autopilot lands on its route keyframe.
       const manualLanding = c.w >= 0.5 && overWater && v.y < TRANSITION.landingAltitude && v.vSpeed < 0;
-      // Autopilot lands when the route turns to boat; on hand-back this also lands a bird
+      // Autopilot lands when the route turns to boat; on hand-back this also lands a glider
       // that has flown back onto a boat stretch.
       const autoLanding = autopilotDriving && ap.routeMode === "boat" && overWater && v.lateral < 40;
       if (manualLanding || autoLanding) start(st, "LANDING");
@@ -61,7 +61,7 @@ export function updateController(st: State, world: World, dt: number): void {
       const atMax = inp.throttle > 0.5 && v.speed >= BOAT.maxSpeed - 0.05;
       v.throttleHeld = atMax ? v.throttleHeld + dt : 0;
       const manualTakeoff = v.throttleHeld >= TRANSITION.takeoffHold;
-      const autoTakeoff = autopilotDriving && ap.routeMode === "bird";
+      const autoTakeoff = autopilotDriving && ap.routeMode === "glider";
       if ((manualTakeoff || autoTakeoff) && takeoffAllowed(st, world)) start(st, "TAKEOFF");
       break;
     }
@@ -71,7 +71,7 @@ export function updateController(st: State, world: World, dt: number): void {
       break;
     case "TAKEOFF":
       v.transitionT += dt;
-      if (v.transitionT >= TRANSITION.takeoff) setMode(st, "BIRD");
+      if (v.transitionT >= TRANSITION.takeoff) setMode(st, "GLIDER");
       break;
   }
 }

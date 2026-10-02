@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Danube Flyover</title>
-    <meta name="description" content="Fly as a bird along the Budapest riverfront, land on the Danube and carry on as a boat." />
+    <meta name="description" content="Fly a glider along the Budapest riverfront, land on the Danube and carry on as a boat." />
   </head>
   <body>
     <canvas id="view" aria-label="Danube Flyover 3D view"></canvas>
@@ -32,7 +32,7 @@
       <button id="sound" type="button" aria-pressed="false" aria-label="Music" title="Music on (M)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path class="speaker" d="M2 6.1h2.4L7.9 3v10L4.4 9.9H2z" /><path class="waves" d="M10.2 5.7a3.2 3.2 0 0 1 0 4.6M12.1 3.8a5.8 5.8 0 0 1 0 8.4" /><path class="mute" d="M10.4 6.2l3.6 3.6M14 6.2l-3.6 3.6" /></svg>
       </button>
-      <span id="mode" class="badge" data-mode="bird">Bird</span>
+      <span id="mode" class="badge" data-mode="glider">Glider</span>
       <span id="pilot" class="badge">Autopilot</span>
       <label id="time" title="Time of day (T to hide)">
         <span id="clock">18:00</span>
@@ -46,7 +46,7 @@
       <p>A flight along the Budapest riverfront, from the Japanese Garden on Margaret Island to the Central Market Hall.</p>
       <h3>Controls</h3>
       <ul>
-        <li>The autopilot flies the tour. Steer to take over: W/S speed, A/D turn, Q/E down and up (as the bird), or drag. After 3 s without input, the autopilot takes back over.</li>
+        <li>The autopilot flies the tour. Steer to take over: W/S speed, A/D turn, Q/E down and up (as the glider), or drag. After 3 s without input, the autopilot takes back over.</li>
         <li>Land: hold Q over the water. Take off: hold W at the boat's top speed.</li>
         <li>Space pauses the tour and leaves you in control. 1–9 and 0 jump to the ten stops. T hides the time slider.</li>
         <li>Landmark cards: click one to open it, Esc to close it.</li>
@@ -66,6 +66,10 @@
       <ul>
         <li>Buildings, the river, bridges, parks and trees: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>, available under the Open Database Licence (ODbL).</li>
         <li>Terrain: contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.</li>
+      </ul>
+      <h3>Images</h3>
+      <ul>
+        <li>The building and landmark textures and the landmark card illustrations are AI-generated with OpenAI's image model (gpt-image-2.5), repainted from our own procedural layouts and our renders of the flyover's model. The skies and the water are procedural.</li>
       </ul>
       <h3>Music</h3>
       <ul id="music-credits"></ul>

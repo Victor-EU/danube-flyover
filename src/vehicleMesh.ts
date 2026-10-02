@@ -1,70 +1,131 @@
-// The one vehicle with two states: a low-poly gull and a small boat, scaled in and out of
-// each other behind the splash. Both face -Z in their local space.
+// The one vehicle with two states: a sailplane and a small boat, scaled in and out of each
+// other behind the splash. Both face -Z in their local space, in metres.
 
 import {
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
-  ConeGeometry,
-  DoubleSide,
+  Color,
   Group,
+  LatheGeometry,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
-  OctahedronGeometry,
+  SphereGeometry,
+  Vector2,
+  Vector3,
 } from "three";
 import type { State } from "./state";
+import { SHARED } from "./world/night";
 
-const SCALE = 2; // stylised: big enough to read 12 m in front of the camera
-
-function wingGeometry(side: 1 | -1): BufferGeometry {
-  // A swept, tapered wing from the shoulder outwards, with a dark tip.
-  const s = side;
-  const pos = new Float32Array([
-    0, 0, -0.18, s * 0.75, 0.03, -0.1, 0, 0, 0.22, // inner panel
-    s * 0.75, 0.03, -0.1, s * 0.72, 0.03, 0.16, 0, 0, 0.22,
-    s * 0.75, 0.03, -0.1, s * 1.45, 0.06, 0.08, s * 0.72, 0.03, 0.16, // tip
-  ]);
+/**
+ * A closed solid through cross-sections of equal size (each a ring of points), with flat ends.
+ * Wings and fins are lofts of four-point aerofoils: leading edge, top, trailing edge, bottom.
+ */
+function loft(sections: Vector3[][]): BufferGeometry {
+  const pos: number[] = [];
+  const tri = (a: Vector3, b: Vector3, c: Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  const n = sections[0].length;
+  for (let k = 0; k + 1 < sections.length; k++) {
+    const a = sections[k];
+    const b = sections[k + 1];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      tri(a[i], b[i], b[j]);
+      tri(a[i], b[j], a[j]);
+    }
+  }
+  const first = sections[0];
+  const last = sections[sections.length - 1];
+  for (let i = 1; i + 1 < n; i++) {
+    tri(first[0], first[i + 1], first[i]);
+    tri(last[0], last[i], last[i + 1]);
+  }
   const geo = new BufferGeometry();
-  geo.setAttribute("position", new BufferAttribute(pos, 3));
-  const col = new Float32Array(27);
-  for (let i = 0; i < 9; i++) col.set(i >= 6 ? [0.18, 0.18, 0.2] : [0.62, 0.65, 0.7], i * 3);
-  geo.setAttribute("color", new BufferAttribute(col, 3));
+  geo.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
   geo.computeVertexNormals();
   return geo;
 }
 
+/** A spanwise aerofoil section at `x`: chord from `le` to `te` (z), `t` thick, at height `y`. */
+function aerofoil(x: number, y: number, le: number, te: number, t: number): Vector3[] {
+  const top = le + (te - le) * 0.3;
+  return [new Vector3(x, y, le), new Vector3(x, y + t * 0.6, top), new Vector3(x, y, te), new Vector3(x, y - t * 0.4, top)];
+}
+
+/** The same for a vertical fin: a section at height `y`, `t` thick across x. */
+function finSection(y: number, le: number, te: number, t: number): Vector3[] {
+  const mid = le + (te - le) * 0.3;
+  return [new Vector3(0, y, le), new Vector3(-t / 2, y, mid), new Vector3(0, y, te), new Vector3(t / 2, y, mid)];
+}
+
+/** Wing geometry: 3.6 m a side, tapering, with 3.5° of dihedral; the last 0.55 m is the red tip. */
+const WING = { root: 0.12, tip: 3.7, y: 0.15, dihedral: Math.tan((3.5 * Math.PI) / 180), red: 3.15 };
+const wingY = (x: number) => WING.y + Math.abs(x) * WING.dihedral;
+const wingLe = (x: number) => -0.3 + 0.14 * (Math.abs(x) / WING.tip);
+const wingTe = (x: number) => 0.16 - 0.16 * (Math.abs(x) / WING.tip);
+const wingT = (x: number) => 0.075 - 0.05 * (Math.abs(x) / WING.tip);
+
+function wingPanel(side: 1 | -1, from: number, to: number): BufferGeometry {
+  const at = (x: number) => aerofoil(side * x, wingY(x), wingLe(x), wingTe(x), wingT(x));
+  const mid = (from + to) / 2;
+  const sections = [at(from), at(mid), at(to)];
+  // Keep the triangles facing out on both sides.
+  return loft(side > 0 ? sections : sections.map((s) => [...s].reverse()));
+}
+
 export class VehicleMesh {
   readonly group = new Group();
-  private readonly bird = new Group();
+  private readonly glider = new Group();
   private readonly boat = new Group();
-  private readonly wings: Group[] = [];
-  private flap = 0;
+  private readonly navMat: MeshBasicMaterial[] = [];
 
   constructor() {
-    const white = new MeshStandardMaterial({ color: "#f4f2ec", roughness: 0.7, flatShading: true });
-    const wingMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.8, flatShading: true, side: DoubleSide });
-    const beak = new MeshStandardMaterial({ color: "#e8b13a", roughness: 0.6, flatShading: true });
+    const gelcoat = new MeshStandardMaterial({ color: "#f6f5f1", roughness: 0.32, flatShading: true });
+    const red = new MeshStandardMaterial({ color: "#d9442f", roughness: 0.4, flatShading: true });
+    const glass = new MeshStandardMaterial({ color: "#1c2a3a", roughness: 0.12, metalness: 0.4, flatShading: true });
 
-    const body = new Mesh(new OctahedronGeometry(0.5, 0), white);
-    body.scale.set(0.32, 0.3, 1.1);
-    const head = new Mesh(new OctahedronGeometry(0.16, 0), white);
-    head.position.set(0, 0.08, -0.52);
-    const bill = new Mesh(new ConeGeometry(0.04, 0.16, 4), beak);
-    bill.rotation.x = -Math.PI / 2;
-    bill.position.set(0, 0.06, -0.7);
-    const tail = new Mesh(new ConeGeometry(0.16, 0.36, 3), white);
-    tail.rotation.x = Math.PI / 2;
-    tail.scale.set(1.4, 1, 0.3);
-    tail.position.set(0, 0, 0.6);
-    this.bird.add(body, head, bill, tail);
+    // The fuselage: a slim pod tapering into the tail boom, turned about its long axis.
+    const profile = [
+      [0, -1.55], [0.1, -1.46], [0.2, -1.22], [0.26, -0.86], [0.27, -0.46], [0.22, -0.05],
+      [0.14, 0.45], [0.09, 1.1], [0.07, 1.7], [0.06, 2.06], [0, 2.14],
+    ].map(([r, a]) => new Vector2(r, a));
+    const bodyGeo = new LatheGeometry(profile, 10);
+    bodyGeo.rotateX(Math.PI / 2);
+    bodyGeo.scale(1, 1.12, 1);
+    const body = new Mesh(bodyGeo, gelcoat);
+    const canopyGeo = new SphereGeometry(1, 10, 6);
+    canopyGeo.scale(0.2, 0.17, 0.62);
+    const canopy = new Mesh(canopyGeo, glass);
+    canopy.position.set(0, 0.17, -0.8);
+    this.glider.add(body, canopy);
+
     for (const side of [1, -1] as const) {
-      const pivot = new Group();
-      pivot.position.set(side * 0.1, 0.05, -0.05);
-      pivot.add(new Mesh(wingGeometry(side), wingMat));
-      this.bird.add(pivot);
-      this.wings.push(pivot);
+      this.glider.add(new Mesh(wingPanel(side, WING.root, WING.red), gelcoat), new Mesh(wingPanel(side, WING.red, WING.tip), red));
+      // A winglet standing up from the tip, canted slightly out.
+      const x = WING.tip;
+      const y = wingY(x);
+      const winglet = [finSection(0, -0.16, 0.0, 0.02), finSection(0.22, -0.07, 0.02, 0.012)].map((sec) =>
+        sec.map((p) => new Vector3(side * (x + 0.18 * p.y) + p.x, y + p.y, p.z)),
+      );
+      this.glider.add(new Mesh(loft(winglet), red));
+      // Navigation lights at the tips: red to port (left), green to starboard.
+      const nav = new MeshBasicMaterial({ color: side > 0 ? "#3dff6a" : "#ff3a2a" });
+      nav.userData.base = nav.color.clone();
+      this.navMat.push(nav);
+      const lamp = new Mesh(new SphereGeometry(0.045, 6, 4), nav);
+      lamp.position.set(side * (x + 0.02), y + 0.01, -0.1);
+      this.glider.add(lamp);
     }
-    this.bird.scale.setScalar(SCALE);
+
+    // The T-tail: the fin over the end of the boom and the tailplane across its top.
+    const fin = loft([finSection(0.04, 1.56, 2.13, 0.05), finSection(0.42, 1.74, 2.13, 0.035), finSection(0.78, 1.9, 2.1, 0.025)]);
+    this.glider.add(new Mesh(fin, red));
+    for (const side of [1, -1] as const) {
+      const at = (x: number) => aerofoil(side * x, 0.79, 1.86 + 0.1 * (x / 0.78), 2.12 - 0.04 * (x / 0.78), 0.03 - 0.012 * (x / 0.78));
+      const sections = [at(0), at(0.39), at(0.78)];
+      this.glider.add(new Mesh(loft(side > 0 ? sections : sections.map((sec) => [...sec].reverse())), gelcoat));
+    }
 
     const hullMat = new MeshStandardMaterial({ color: "#f1ede4", roughness: 0.6, flatShading: true });
     const stripe = new MeshStandardMaterial({ color: "#b0362e", roughness: 0.6, flatShading: true });
@@ -89,33 +150,28 @@ export class VehicleMesh {
     // light inside this group, which is hidden in flight, would drop out of three's light list
     // and recompile every material at each landing.
 
-    for (const m of [...this.bird.children, ...this.boat.children]) {
+    for (const m of [...this.glider.children, ...this.boat.children]) {
       m.castShadow = true;
       m.traverse((c) => (c.castShadow = true));
     }
-    this.group.add(this.bird, this.boat);
+    this.group.add(this.glider, this.boat);
   }
 
-  update(st: State, dt: number): void {
+  update(st: State, _dt: number): void {
     const v = st.vehicle;
     this.group.position.set(v.x, v.y, v.z);
     this.group.rotation.set(v.pitch, -v.heading, -v.roll, "YXZ");
 
-    const bird = Math.max(0.001, 1 - v.boatness);
+    const glider = Math.max(0.001, 1 - v.boatness);
     const boat = Math.max(0.001, v.boatness);
-    this.bird.scale.setScalar(SCALE * bird);
-    this.bird.visible = bird > 0.01;
+    this.glider.scale.setScalar(glider);
+    this.glider.visible = glider > 0.01;
     this.boat.scale.setScalar(boat);
     this.boat.visible = boat > 0.01;
     this.boat.position.y = Math.sin(st.t * 1.7) * 0.06;
 
-    // Flap harder when climbing or hovering, glide when diving.
-    const hover = st.autopilot.holdLeft > 0;
-    const rate = hover ? 3.2 : v.vSpeed > 1 ? 2.6 : v.vSpeed < -3 ? 0.4 : 1.6;
-    const amp = hover ? 0.75 : v.vSpeed < -3 ? 0.08 : 0.45;
-    this.flap += dt * rate * Math.PI * 2;
-    const a = Math.sin(this.flap) * amp;
-    this.wings[0].rotation.z = a;
-    this.wings[1].rotation.z = -a;
+    // The navigation lights brighten into the night, enough for the bloom to catch them.
+    const k = 0.7 + 3.3 * SHARED.uNight.value;
+    for (const m of this.navMat) m.color.copy(m.userData.base as Color).multiplyScalar(k);
   }
 }

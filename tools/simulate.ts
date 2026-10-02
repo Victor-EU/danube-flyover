@@ -124,11 +124,11 @@ console.log("\n— Tour, no input —");
       endAt = st.t;
       console.log(`${mmss(st.t)}  end of the route: circling`);
     }
-    if (v.mode === "BIRD" && v.vSpeed > st.control.command.climb + 3) {
+    if (v.mode === "GLIDER" && v.vSpeed > st.control.command.climb + 3) {
       lifted++;
       const c = contacts.get(ap.beat) ?? { frames: 0, worst: 0 };
       c.frames++;
-      c.worst = Math.max(c.worst, world.floor.birdMin(v.x, v.z) - v.y);
+      c.worst = Math.max(c.worst, world.floor.gliderMin(v.x, v.z) - v.y);
       contacts.set(ap.beat, c);
     }
     if (v.lateral > maxLateral && ap.holdLeft <= 0 && ap.phase === "tour") {
@@ -148,8 +148,8 @@ console.log("\n— Tour, no input —");
   lighting.chainBridge = chainBridgeClock;
 }
 
-// 2a. Pause as the bird: it circles at minimum speed; the clock stops; resuming hands back at once.
-console.log("\n— Pause, bird (beat 3) —");
+// 2a. Pause as the glider: it circles at minimum speed; the clock stops; resuming hands back at once.
+console.log("\n— Pause, glider (beat 3) —");
 {
   const sim = createSim(route, world);
   const { st } = sim;
@@ -166,8 +166,8 @@ console.log("\n— Pause, bird (beat 3) —");
     far = Math.max(far, Math.hypot(v.x - x0, v.z - z0));
     minClear = Math.min(minClear, v.y - world.floor.surface(v.x, v.z));
   });
-  check(st.control.w === 1 && st.vehicle.mode === "BIRD", `user in control after 40 s paused (w ${st.control.w})`);
-  check(Math.abs(st.vehicle.speed - 8) < 0.2, `bird at minimum speed (${st.vehicle.speed.toFixed(1)} m/s)`);
+  check(st.control.w === 1 && st.vehicle.mode === "GLIDER", `user in control after 40 s paused (w ${st.control.w})`);
+  check(Math.abs(st.vehicle.speed - 8) < 0.2, `glider at minimum speed (${st.vehicle.speed.toFixed(1)} m/s)`);
   check(far < 200, `circles near where it paused (furthest ${far.toFixed(0)} m)`);
   check(st.timeOfDay === clock, "the sunset-run clock stops");
   console.log(`  lowest clearance above the floor surface: ${minClear.toFixed(1)} m`);
@@ -193,15 +193,15 @@ console.log("\n— Pause, boat (beat 7) —");
   check(world.river.isWater(st.vehicle.x, st.vehicle.z), "still on the water");
 }
 
-// 2c. Hand-back on a boat stretch: the user flies the bird off the route before the landing;
+// 2c. Hand-back on a boat stretch: the user flies the glider off the route before the landing;
 //     the autopilot flies back and lands, and the camera keys wait for the next key.
-console.log("\n— Hand-back, bird over a boat stretch (beat 6) —");
+console.log("\n— Hand-back, glider over a boat stretch (beat 6) —");
 {
   const sim = createSim(route, world);
   const { st } = sim;
   sim.tour.jumpNow(st, 6);
   // Take over just before the landing point: bank left, then fly straight on along the river.
-  const landingS = route.pointS[route.points.findIndex((p, i) => i > 0 && p.mode === "boat" && route.points[i - 1].mode === "bird")];
+  const landingS = route.pointS[route.points.findIndex((p, i) => i > 0 && p.mode === "boat" && route.points[i - 1].mode === "glider")];
   run(sim, 60, () => st.autopilot.s > landingS - 60);
   hold(sim, 1.5, { steer: -1 });
   hold(sim, 5, { climb: 0.01 });
@@ -227,19 +227,19 @@ console.log("\n— Hand-back, bird over a boat stretch (beat 6) —");
   check(!st.camera.suspended, `camera keys resume at the next key (key ${st.camera.key}, ${st.camera.mode})`);
 }
 
-// 2d. Hand-back on a bird stretch: the user holds the boat back past the take-off point;
+// 2d. Hand-back on a glider stretch: the user holds the boat back past the take-off point;
 //     on hand-back the autopilot takes off at once (clear of bridge decks).
-console.log("\n— Hand-back, boat over a bird stretch (beat 9) —");
+console.log("\n— Hand-back, boat over a glider stretch (beat 9) —");
 {
   const sim = createSim(route, world);
   const { st } = sim;
   sim.tour.jumpNow(st, 9);
   // Hold the throttle slightly back (no take-off), past the take-off point.
-  const takeoffS = route.pointS[route.points.findIndex((p, i) => i > 0 && p.mode === "bird" && route.points[i - 1].mode === "boat")];
+  const takeoffS = route.pointS[route.points.findIndex((p, i) => i > 0 && p.mode === "glider" && route.points[i - 1].mode === "boat")];
   hold(sim, 120, { throttle: -0.01 }, () => {
     if (st.autopilot.s > takeoffS + 40) st.input.throttle = 0.001;
   });
-  check(st.vehicle.mode === "BOAT" && st.autopilot.routeMode === "bird", `held as the boat past the take-off point (route mode ${st.autopilot.routeMode})`);
+  check(st.vehicle.mode === "BOAT" && st.autopilot.routeMode === "glider", `held as the boat past the take-off point (route mode ${st.autopilot.routeMode})`);
   let tookOff = -1;
   const t0 = st.t;
   run(sim, 30, () => {
@@ -261,7 +261,7 @@ console.log("\n— Jumps —");
       peak = Math.max(peak, st.ui.fade);
     });
     const beat = route.beats.find((b) => b.id === n)!;
-    const want = route.modeAt(beat.s + 1) === "boat" ? "BOAT" : "BIRD";
+    const want = route.modeAt(beat.s + 1) === "boat" ? "BOAT" : "GLIDER";
     check(peak === 1 && st.ui.fade === 0 && Math.abs(st.autopilot.s - beat.s) < 60 && st.vehicle.mode === want, `jump to ${n}: faded, at s ${st.autopilot.s.toFixed(0)} (beat at ${beat.s.toFixed(0)}), ${st.vehicle.mode}`);
   }
 }
@@ -302,7 +302,7 @@ console.log("\n— Heroes, quality and life —");
   check(missing.length === 0, `every landmark's model is built (${lm.filter((l) => l.model).length} models${missing.length ? `; missing ${missing.map((l) => l.id).join(", ")}` : ""})`);
   check(lm.every((l) => !l.placeholder), "no placeholder blocks left");
   check(lm.every((l) => l.text && l.illustration && existsSync(new URL(`../public/data/${l.illustration}`, import.meta.url))), "every card has its paragraph and illustration");
-  // The floor grid rises over the heroes, so the bird can't fly through them (15 m clearance).
+  // The floor grid rises over the heroes, so the glider can't fly through them (15 m clearance).
   const top = (id: string) => {
     const sgt = world.sights.find((x) => x.id === id)!;
     let h = 0;
@@ -311,7 +311,7 @@ console.log("\n— Heroes, quality and life —");
   };
   const tops = { parliament: top("parliament"), matthias: top("matthias"), libertyStatue: top("libertyStatue"), palace: top("palace") };
   console.log(`  floor over the heroes: ${Object.entries(tops).map(([k, v]) => `${k} ${v.toFixed(0)} m`).join(", ")}`);
-  check(tops.parliament > 95 && tops.libertyStatue > 155, "the bird's floor includes the dome and the statue");
+  check(tops.parliament > 95 && tops.libertyStatue > 155, "the glider's floor includes the dome and the statue");
   const q = json<QualityJson>("quality.json");
   const keys = Object.keys(q.tiers.high).sort().join();
   check(["high", "medium", "low"].every((t) => Object.keys(q.tiers[t as "high"]).sort().join() === keys) && q.tiers.low.shadowMapSize === 0 && !q.tiers.low.reflections, "quality.json: three tiers with the same settings; low has no shadows or reflections");
