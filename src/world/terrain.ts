@@ -76,35 +76,67 @@ export class Terrain {
     return out.multiplyScalar(n);
   }
 
-  buildMesh(): Mesh {
+  /**
+   * The terrain mesh, on every sample, or with a stride on every stride-th one (and the last):
+   * the coarse one the water's reflection draws in its place (water.ts), where its detail
+   * doesn't show. A coarse vertex takes its block's average colour and street glow, so the
+   * streets don't alias at night; the river bed is left out of a bank's average.
+   */
+  buildMesh(stride = 1, material?: MeshStandardMaterial): Mesh {
     const { nx, nz, cell } = this;
-    const pos = new Float32Array(nx * nz * 3);
-    const col = new Float32Array(nx * nz * 3);
-    const glow = new Float32Array(nx * nz);
+    const xs = strided(nx, stride);
+    const zs = strided(nz, stride);
+    const mx = xs.length;
+    const mz = zs.length;
+    const pos = new Float32Array(mx * mz * 3);
+    const col = new Float32Array(mx * mz * 3);
+    const glow = new Float32Array(mx * mz);
     const c = new Color();
-    for (let j = 0; j < nz; j++)
-      for (let i = 0; i < nx; i++) {
+    const r = Math.floor(stride / 2);
+    for (let b = 0; b < mz; b++)
+      for (let a = 0; a < mx; a++) {
+        const i = xs[a];
+        const j = zs[b];
+        const v = b * mx + a;
         const k = j * nx + i;
-        pos[k * 3] = this.x0 + i * cell;
-        pos[k * 3 + 1] = this.heights[k];
-        pos[k * 3 + 2] = this.z0 + j * cell;
-        this.colorAt(k, c);
-        col[k * 3] = c.r;
-        col[k * 3 + 1] = c.g;
-        col[k * 3 + 2] = c.b;
-        glow[k] = GLOW[this.classes[k]] ?? 0;
+        pos[v * 3] = this.x0 + i * cell;
+        pos[v * 3 + 1] = this.heights[k];
+        pos[v * 3 + 2] = this.z0 + j * cell;
+        const bed = this.classes[k] === TERRAIN_CLASS.bed;
+        let n = 0;
+        let g = 0;
+        let [cr, cg, cb] = [0, 0, 0];
+        for (let jj = Math.max(0, j - r); jj <= Math.min(nz - 1, j + r); jj++)
+          for (let ii = Math.max(0, i - r); ii <= Math.min(nx - 1, i + r); ii++) {
+            const kk = jj * nx + ii;
+            if (!bed && this.classes[kk] === TERRAIN_CLASS.bed) continue;
+            this.colorAt(kk, c);
+            cr += c.r;
+            cg += c.g;
+            cb += c.b;
+            g += GLOW[this.classes[kk]] ?? 0;
+            n++;
+          }
+        col[v * 3] = cr / n;
+        col[v * 3 + 1] = cg / n;
+        col[v * 3 + 2] = cb / n;
+        glow[v] = g / n;
       }
     // Skip quads entirely under the water: the river surface hides them anyway.
+    const h = this.heights;
+    const dry = (i0: number, i1: number, j0: number, j1: number) => {
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (h[j * nx + i] >= -0.5) return true;
+      return false;
+    };
     const index: number[] = [];
-    for (let j = 0; j < nz - 1; j++)
-      for (let i = 0; i < nx - 1; i++) {
-        const a = j * nx + i;
-        const b = a + 1;
-        const d = a + nx;
+    for (let b = 0; b < mz - 1; b++)
+      for (let a = 0; a < mx - 1; a++) {
+        if (!dry(xs[a], xs[a + 1], zs[b], zs[b + 1])) continue;
+        const p = b * mx + a;
+        const q = p + 1;
+        const d = p + mx;
         const e = d + 1;
-        const h = this.heights;
-        if (h[a] < -0.5 && h[b] < -0.5 && h[d] < -0.5 && h[e] < -0.5) continue;
-        index.push(a, d, b, b, d, e);
+        index.push(p, d, q, q, d, e);
       }
     const geo = new BufferGeometry();
     geo.setAttribute("position", new BufferAttribute(pos, 3));
@@ -112,13 +144,24 @@ export class Terrain {
     geo.setAttribute("glow", new BufferAttribute(glow, 1));
     geo.setIndex(new BufferAttribute(new Uint32Array(index), 1));
     geo.computeVertexNormals();
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
-    patchTerrain(mat);
+    let mat = material;
+    if (!mat) {
+      mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+      patchTerrain(mat);
+    }
     const mesh = new Mesh(geo, mat);
     mesh.receiveShadow = true;
-    mesh.name = "terrain";
+    mesh.name = stride > 1 ? "terrain (reflection)" : "terrain";
     return mesh;
   }
+}
+
+/** Every stride-th index below n, and the last. */
+function strided(n: number, stride: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < n - 1; i += stride) out.push(i);
+  out.push(n - 1);
+  return out;
 }
 
 function hash(i: number, j: number): number {

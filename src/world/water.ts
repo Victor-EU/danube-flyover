@@ -24,8 +24,18 @@ import { QUALITY, TEXTURES } from "../config";
 import { SHARED } from "./night";
 import { patchMaterial } from "./shaderPatch";
 
-/** Layers kept out of the reflection: the water itself, its streaks, the trees and the labels. */
-export const LAYER = { water: 1, trees: 2, labels: 3 };
+/**
+ * Layers kept out of the reflection: the water itself, its streaks, the trees, the labels, and
+ * the full terrain, which a coarse one (on MIRROR_ONLY) stands in for there.
+ */
+export const LAYER = { water: 1, trees: 2, labels: 3, terrain: 4 };
+/** Drawn only in the reflection. */
+export const MIRROR_ONLY = 5;
+/**
+ * The reflection's terrain takes every 4th sample (40 m): the full one was two thirds of the
+ * pass's triangles, for detail the ripples and the half resolution blur away.
+ */
+export const MIRROR_TERRAIN_STRIDE = 4;
 
 export interface MirrorZone {
   x: number;
@@ -205,5 +215,5 @@ class Mirror {
 const UP = new Vector3(0, 1, 0);
 
 function mirrorLayers(main: Layers): number {
-  return main.mask & ~((1 << LAYER.water) | (1 << LAYER.trees) | (1 << LAYER.labels));
+  return (main.mask & ~((1 << LAYER.water) | (1 << LAYER.trees) | (1 << LAYER.labels) | (1 << LAYER.terrain))) | (1 << MIRROR_ONLY);
 }

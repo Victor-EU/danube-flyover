@@ -55,8 +55,7 @@ async function cards(r: Recorder): Promise<void> {
   const status = document.getElementById("loading")!;
   status.hidden = false;
   const cam = new PerspectiveCamera(50, 16 / 10, 0.5, 20000);
-  cam.layers.enable(LAYER.water);
-  cam.layers.enable(LAYER.trees);
+  for (const l of [LAYER.water, LAYER.trees, LAYER.terrain]) cam.layers.enable(l);
   const out = document.createElement("canvas");
   out.width = 960;
   out.height = 600;

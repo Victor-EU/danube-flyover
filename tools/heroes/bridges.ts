@@ -121,12 +121,19 @@ export function elisabethBridge(ctx: HeroContext): Model[] {
     const g = Math.min(ctx.ground(t.x, t.z), def.top - 2);
     m.frame(t.x, 0, t.z, headingOf(t.ux, t.uz));
     const off = def.width / 2 + tw.thick / 2;
-    // Two tapering legs, a crossbeam at the top and one under the deck.
+    // Two tapering legs on stone footings, each under the saddle its cable runs over; an
+    // arched crossbeam at the top, and a plain one under the deck.
+    const top = tw.height;
     for (const sx of [-off, off]) {
+      if (g < def.top - 6) m.box(sx - tw.thick / 2 - 0.8, sx + tw.thick / 2 + 0.8, -tw.along / 2 - 0.8, tw.along / 2 + 0.8, g - 2, g + 2.5, PIER_STONE);
       m.orientedBox(sx, 0, tw.thick, tw.along, 0, g - 2, def.top + 2, WHITE, null);
-      m.prism(sx, 0, 4, tw.thick * 0.62, def.top + 2, tw.height, WHITE, WHITE, Math.PI / 4, tw.thick * 0.45);
+      m.prism(sx, 0, 4, tw.thick * 0.62, def.top + 2, top, WHITE, WHITE, Math.PI / 4, tw.thick * 0.45);
+      m.box(sx - 1.9, sx + 1.9, -tw.along * 0.42, tw.along * 0.42, top, top + 0.9, WHITE);
+      m.lathe(sx, 0, 8, [[1.75, top + 0.9], [1.5, top + 1.7], [0.9, top + 2.3], [0.2, top + 2.5]], WHITE, Math.PI / 8);
     }
-    m.box(-off, off, -tw.along * 0.32, tw.along * 0.32, tw.height - 3.2, tw.height - 0.6, WHITE);
+    // Into the legs a little, which taper.
+    const inner = off - tw.thick * 0.3;
+    archBeam(m, inner, top - 0.6, top - 7.5, top - 3.4, tw.along * 0.32, WHITE);
     m.box(-off, off, -tw.along * 0.36, tw.along * 0.36, def.top - def.thickness - 2.2, def.top - def.thickness, WHITE);
     m.identity();
   }
@@ -137,6 +144,31 @@ export function elisabethBridge(ctx: HeroContext): Model[] {
     hangers(m, ctx, def, c, 8, 0.1, CABLE);
   }
   return [m];
+}
+
+/**
+ * A crossbeam between two legs at ±x (local frame, across x), its top level at `top`, its
+ * soffit an arch from `foot` at the legs up to `crown` in the middle; `half` deep either side
+ * of z = 0. Built from a quad per arch segment, so no face is concave.
+ */
+function archBeam(m: Model, x: number, top: number, foot: number, crown: number, half: number, s: Surface): void {
+  const n = 10;
+  const soffit = (k: number): [number, number] => {
+    const t = k / n;
+    const u = -x + 2 * x * t;
+    // A segmental arch: a circle's arc through both feet and the crown.
+    const rise = crown - foot;
+    const r = (x * x + rise * rise) / (2 * rise);
+    return [u, crown - r + Math.sqrt(Math.max(0, r * r - u * u))];
+  };
+  for (let k = 0; k < n; k++) {
+    const [u0, y0] = soffit(k);
+    const [u1, y1] = soffit(k + 1);
+    for (const z of [-half, half])
+      m.faceToward([[u0, y0, z], [u1, y1, z], [u1, top, z], [u0, top, z]], [[0, 0], [(u1 - u0) / 8, 0], [(u1 - u0) / 8, (top - y1) / 8], [0, (top - y0) / 8]], s, [0, 0, z]);
+    m.faceToward([[u0, y0, -half], [u1, y1, -half], [u1, y1, half], [u0, y0, half]], [[0, 0], [(u1 - u0) / 8, 0], [(u1 - u0) / 8, (2 * half) / 8], [0, (2 * half) / 8]], s, [0, -1, 0]);
+  }
+  m.faceToward([[-x, top, -half], [x, top, -half], [x, top, half], [-x, top, half]], [[0, 0], [(2 * x) / 8, 0], [(2 * x) / 8, (2 * half) / 8], [0, (2 * half) / 8]], s, [0, 1, 0]);
 }
 
 /** Vertical hangers from a cable down to the deck, every `step` metres. */

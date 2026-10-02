@@ -2,6 +2,41 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-02 — Hero detail
+
+M4 left three heroes simple: "the palace's long front repeats one bay, the Elisabeth Bridge's pylons are plain portals, and the lions are blocks."
+
+- **Buda Castle.** The footprint already has the river front's two projecting wings and its centre, but the whole palace stood at one height under one mansard.
+  - The wings now rise a storey above the cornice, the facade's next row of windows, and each has its own hipped roof.
+  - The mansard is lower (a 4.4 m rise, from 6.5 m), so the wings and the dome stand out of it.
+  - The centre under the dome is a portico: six giant columns on a balcony over the lower storeys, then an entablature, and an attic with a statue over each column.
+  - Both are found from the footprint (its walls facing the river), not placed by hand.
+  - 869 → 1,401 triangles.
+- **The Chain Bridge lions** are couchant now:
+  - the body, haunches, mane, face, outstretched forelegs and tail;
+  - on a plinth with a base, a die and a cornice.
+  - They're lofted with a new kit primitive (`loft`: elliptical sections along a path, capped at both ends).
+  - **Smooth stone:** the API's plain layer has joints, which ran across the carving, so the lions take their texture from one point inside a single block.
+  - They face the same way as before. 8,234 → 9,706 triangles for the bridge.
+- **The Elisabeth Bridge's pylons:**
+  - a segmental arch under the top crossbeam;
+  - a saddle on each leg where the cable runs over (a plate and a rounded cover);
+  - stone footings where the legs meet the ground.
+  - 6,636 → 7,012 triangles.
+- **Unchanged elsewhere:** `tube` now builds its rings with the same code as `loft`, and the other heroes' files are byte-identical. The floor grid changed over the palace (the wings' roofs and the statues), the city and the trees didn't, and `npm run simulate` passes.
+- **Not redone:** the three cards' illustrations were painted from renders of the old models. Recording the renders again is free, but repainting them (`npm run cards -- --api --only <id>`, once for each) would take about $0.18 of the API budget.
+
+## 2026-10-02 — The reflection's draw set
+
+The doc's "reflection passes draw a reduced set", left over from M3 and M4.
+
+- **A coarse terrain stands in for the full one in the reflection.** The pass already left out the water, its streaks, the trees and the labels. Of what was left, the terrain was two thirds: 0.42 M of the pass's 0.50–0.75 M triangles, drawn whole in every reflected frame.
+  - The coarse one takes every 4th sample (40 m), with the same material: 27 k triangles. Each vertex averages its block's colour and street glow, so the streets don't alias at night. The river bed is left out of a bank's average, so the banks don't darken.
+  - Layers: the full terrain has its own (`LAYER.terrain`), which the reflection leaves out, and the coarse one is on `MIRROR_ONLY`, which only the reflection draws. Any camera that draws the scene enables `LAYER.terrain` (the cards' recorder does).
+- **Result over a whole run:** the reflection pass is 0.11–0.35 M triangles, at the same 19–43 draw calls. On the M3 at 1024 × 768 (half of 2048 × 1536), the pass went from 1.35–1.7 ms to 1.1–1.5 ms. That's measured by batching 30 passes between syncs; ANGLE's Metal timer queries gave numbers that didn't add up. A weaker GPU, which spends more on vertices, should gain more.
+- **The look is unchanged:** at four frames between golden hour and night, under 0.15% of pixels differ by more than 12 levels, all on the reflected quay line.
+- **Left as they are:** the buildings, about 0.15 M triangles in the pass on average. Inland Pest is mostly hidden behind the riverfront in the reflection, but its meshes are by district, so leaving it out would mean splitting the city by distance from the river for a small gain.
+
 ## 2026-10-02 — The image-API set
 
 The committed textures and card illustrations now come from OpenAI's image API, `gpt-image-2.5-sunburst` at "high", using your key. The set is 71 answers. With the trials and redos below, 126 were paid for: $8.28 of the $20 budget, $6.65 for the textures and $1.63 for the cards. The procedural set is still the default for a run without a key. The site credits the API set as AI-generated (About, under Images).

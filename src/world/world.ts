@@ -16,7 +16,7 @@ import { River, type RiverJson } from "./river";
 import { Terrain } from "./terrain";
 import { patchBuildings, patchQuays } from "./surfaces";
 import { buildTrees, type TreesJson } from "./trees";
-import { LAYER } from "./water";
+import { LAYER, MIRROR_ONLY, MIRROR_TERRAIN_STRIDE } from "./water";
 
 export interface WorldFiles {
   river: RiverJson;
@@ -83,7 +83,12 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
   let trees: InstancedMesh | null = null;
 
   if (models) {
-    group.add(time("terrainMesh", () => terrain.buildMesh()));
+    const ground = time("terrainMesh", () => terrain.buildMesh());
+    ground.layers.set(LAYER.terrain);
+    group.add(ground);
+    const coarse = time("terrainMirror", () => terrain.buildMesh(MIRROR_TERRAIN_STRIDE, ground.material as MeshStandardMaterial));
+    coarse.layers.set(MIRROR_ONLY);
+    group.add(coarse);
     group.add(time("apron", () => buildApron(terrain)));
     group.add(buildFrame(river, bounds, water));
     time("models", () => {

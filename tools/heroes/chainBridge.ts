@@ -6,7 +6,7 @@
 import type { BridgeJson } from "../../src/world/bridges";
 import type { HeroContext } from "./context";
 import { alongAxis, deck, headingOf, lampPosts, pier, railing } from "./bridgeKit";
-import { Model, surf, type V3 } from "./kit";
+import { Model, surf, type UV, type V3 } from "./kit";
 
 const LIMESTONE = surf("ashlar", "#dccfb0");
 const PIER = surf("ashlar", "#c9bc9e");
@@ -15,7 +15,9 @@ const CHAIN = surf("metal", "#4f564f", 1.1);
 const ROAD = surf("plain", "#55534e", 0.15);
 const SOFFIT = surf("plain", "#4a4f49", 0.3);
 const LAMP = surf("metal", "#3c3f3b", 0.4);
-const LION = surf("ashlar", "#d2c6aa");
+const LION = surf("plain", "#d6cbb0");
+/** Where in the plain layer the lions take their stone: inside one block, clear of the joints. */
+const CARVED: UV = [0.4, 0.55];
 
 export function chainBridge(ctx: HeroContext): Model[] {
   const def = ctx.bridge("Chain Bridge");
@@ -115,14 +117,31 @@ function chains(m: Model, ctx: HeroContext, def: BridgeJson): void {
   m.identity();
 }
 
-/** A couchant lion on a plinth (blocky: it is read from the water, 100 m off). */
+/**
+ * A couchant lion on its plinth (János Marschalkó, 1852), facing local -z: the body lying low,
+ * the haunches, the head raised in its mane, the forepaws stretched out in front and the tail
+ * along the side. Lofted from a few sections each: it is read from the water, 100 m off.
+ */
 function lion(m: Model, ctx: HeroContext, x: number, z: number, heading: number): void {
   const g = ctx.ground(x, z);
   m.frame(x, g, z, heading);
-  m.box(-2, 2, -3.6, 3.6, -1, 2.6, LIMESTONE);
-  m.box(-1.1, 1.1, -2.4, 2.2, 2.6, 4.0, LION);
-  m.box(-1.3, 1.3, -3.4, -1.7, 2.6, 5.0, LION);
-  m.box(-0.75, 0.75, -4.1, -3.2, 3.4, 4.6, LION);
-  for (const sx of [-0.7, 0.4]) m.box(sx, sx + 0.35, -3.9, -2.4, 2.6, 3.0, LION);
-  m.box(-0.2, 0.2, 2.0, 3.2, 3.0, 3.4, LION);
+  // The plinth: base, die and cornice.
+  m.box(-2.2, 2.2, -3.8, 3.8, -1, 0.5, LIMESTONE);
+  m.box(-1.95, 1.95, -3.55, 3.55, 0.5, 2.2, LIMESTONE);
+  m.box(-2.15, 2.15, -3.75, 3.75, 2.2, 2.6, LIMESTONE);
+  const y = 2.6;
+  // The body, from the rump to the chest.
+  m.loft([[0, y + 0.75, 2.75], [0, y + 0.85, 2.2], [0, y + 0.9, 1.0], [0, y + 1.0, -0.3], [0, y + 1.1, -1.3]], [[0.45, 0.4], [0.95, 0.8], [1.0, 0.85], [1.05, 0.95], [1.1, 1.05]], 8, LION, CARVED);
+  // The mane, rising from the shoulders round the back of the head.
+  m.loft([[0, y + 1.1, -0.6], [0, y + 1.65, -1.6], [0, y + 2.0, -2.3], [0, y + 2.05, -2.6]], [[1.15, 1.1], [1.35, 1.3], [1.15, 1.15], [0.8, 0.85]], 10, LION, CARVED);
+  // The face and muzzle, out of the mane.
+  m.loft([[0, y + 2.05, -2.4], [0, y + 2.0, -3.0], [0, y + 1.82, -3.45], [0, y + 1.7, -3.62]], [[0.72, 0.75], [0.62, 0.6], [0.45, 0.4], [0.22, 0.2]], 8, LION, CARVED);
+  for (const sx of [-1, 1]) {
+    // A foreleg stretched out along the plinth, the paw at its end.
+    m.loft([[sx * 0.55, y + 0.55, -1.0], [sx * 0.55, y + 0.36, -2.4], [sx * 0.55, y + 0.34, -3.55]], [[0.36, 0.4], [0.3, 0.3], [0.36, 0.32]], 6, LION, CARVED);
+    // A haunch.
+    m.loft([[sx * 0.72, y + 0.95, 2.45], [sx * 0.88, y + 0.7, 1.6], [sx * 0.84, y + 0.45, 0.8]], [[0.42, 0.5], [0.5, 0.62], [0.32, 0.36]], 6, LION, CARVED);
+  }
+  // The tail, curled forward along the right flank.
+  m.loft([[0.5, y + 0.6, 2.75], [0.95, y + 0.3, 2.0], [1.1, y + 0.22, 0.8], [1.0, y + 0.25, -0.2]], [[0.14, 0.14], [0.13, 0.13], [0.12, 0.12], [0.16, 0.14]], 5, LION, CARVED);
 }

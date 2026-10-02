@@ -158,7 +158,7 @@ async function main(): Promise<void> {
   // Debug hooks for the console. flyover.jump(n) cuts straight to the start of beat n.
   const jump = (n: number) => tour.jumpNow(st, n);
   // flyover.camera = someCamera renders from it instead of the rig (for overviews; enable the
-  // LAYER layers on it to see the water, trees and labels); null restores.
+  // LAYER layers on it to see the water, trees, labels and terrain); null restores.
   const debug: { camera: PerspectiveCamera | null } = { camera: null };
   const frame = (dt: number, draw = true) => {
     input.update(st);

@@ -338,33 +338,8 @@ export class Model {
 
   /** A tube of n sides along a path (chains, cables), open at the ends. */
   tube(path: V3[], r: number, n: number, s: Surface): void {
+    const rings = sections(path, () => [r, r], n);
     const l = layerOf(s);
-    let prevSide: V3 | null = null;
-    const rings: V3[][] = [];
-    for (let k = 0; k < path.length; k++) {
-      const p = path[k];
-      const q = path[Math.min(path.length - 1, k + 1)];
-      const o = path[Math.max(0, k - 1)];
-      let t: V3 = [q[0] - o[0], q[1] - o[1], q[2] - o[2]];
-      const tl = Math.hypot(...t) || 1;
-      t = [t[0] / tl, t[1] / tl, t[2] / tl];
-      // A side vector kept as horizontal as possible, so the facets don't twist.
-      let side: V3 = prevSide ?? [-t[2], 0, t[0]];
-      const dot = side[0] * t[0] + side[1] * t[1] + side[2] * t[2];
-      side = [side[0] - t[0] * dot, side[1] - t[1] * dot, side[2] - t[2] * dot];
-      const sl = Math.hypot(...side) || 1;
-      side = [side[0] / sl, side[1] / sl, side[2] / sl];
-      prevSide = side;
-      const up: V3 = [t[1] * side[2] - t[2] * side[1], t[2] * side[0] - t[0] * side[2], t[0] * side[1] - t[1] * side[0]];
-      const ring: V3[] = [];
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        const c = Math.cos(a) * r;
-        const sn = Math.sin(a) * r;
-        ring.push([p[0] + side[0] * c + up[0] * sn, p[1] + side[1] * c + up[1] * sn, p[2] + side[2] * c + up[2] * sn]);
-      }
-      rings.push(ring);
-    }
     let along = 0;
     const circ = (2 * Math.PI * r) / l.tile[1];
     for (let k = 0; k < rings.length - 1; k++) {
@@ -386,6 +361,50 @@ export class Model {
         );
       }
       along += seg;
+    }
+  }
+
+  /**
+   * A closed body along a path (in the local frame): an elliptical section of n sides at each
+   * point, `radii[k]` across and up, capped at both ends. For sculpture: the lions. With a
+   * `patch` (tiles), every vertex takes the layer's texture from that one point, inside a
+   * block, so no joint runs across the carving.
+   */
+  loft(path: V3[], radii: [number, number][], n: number, s: Surface, patch?: UV): void {
+    if (patch) {
+      const at = (pts: V3[], uv: UV[], out: V3) => this.faceToward(pts, uv.map(() => patch), s, out);
+      return this.loftFaces(path, radii, n, s, at);
+    }
+    this.loftFaces(path, radii, n, s, (pts, uv, out) => this.faceToward(pts, uv, s, out));
+  }
+
+  private loftFaces(path: V3[], radii: [number, number][], n: number, s: Surface, emit: (pts: V3[], uv: UV[], out: V3) => void): void {
+    const rings = sections(path, (k) => radii[k], n);
+    const l = layerOf(s);
+    let along = 0;
+    for (let k = 0; k < rings.length - 1; k++) {
+      const seg = Math.hypot(path[k + 1][0] - path[k][0], path[k + 1][1] - path[k][1], path[k + 1][2] - path[k][2]);
+      const [u0, u1] = [along / l.tile[0], (along + seg) / l.tile[0]];
+      const circ = (2 * Math.PI * Math.max(...radii[k])) / l.tile[1];
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const a = rings[k][i];
+        const b = rings[k][j];
+        const out: V3 = [(a[0] + b[0]) / 2 - path[k][0], (a[1] + b[1]) / 2 - path[k][1], (a[2] + b[2]) / 2 - path[k][2]];
+        emit([a, b, rings[k + 1][j], rings[k + 1][i]], [[u0, (circ * i) / n], [u0, (circ * (i + 1)) / n], [u1, (circ * (i + 1)) / n], [u1, (circ * i) / n]], out);
+      }
+      along += seg;
+    }
+    // The ends: a fan round each end point, facing away along the path.
+    for (const [k, k2] of [[0, 1], [path.length - 1, path.length - 2]]) {
+      const c = path[k];
+      const away: V3 = [c[0] - path[k2][0], c[1] - path[k2][1], c[2] - path[k2][2]];
+      const ring = rings[k];
+      const r = Math.max(...radii[k]) / l.tile[0];
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        emit([c, ring[i], ring[j]], [[r, r], [r + Math.cos((i / n) * 2 * Math.PI) * r, r + Math.sin((i / n) * 2 * Math.PI) * r], [r + Math.cos((j / n) * 2 * Math.PI) * r, r + Math.sin((j / n) * 2 * Math.PI) * r]], away);
+      }
     }
   }
 
@@ -517,6 +536,40 @@ export class Model {
 }
 
 const isRing = (p: Polygon | Ring): p is Ring => typeof p[0][0] === "number";
+
+/**
+ * Rings of n points round a path, `radii(k)` across and up at point k: each ring square to the
+ * path, its side vector kept as horizontal as possible so the facets don't twist.
+ */
+function sections(path: V3[], radii: (k: number) => [number, number], n: number): V3[][] {
+  let prevSide: V3 | null = null;
+  const rings: V3[][] = [];
+  for (let k = 0; k < path.length; k++) {
+    const p = path[k];
+    const q = path[Math.min(path.length - 1, k + 1)];
+    const o = path[Math.max(0, k - 1)];
+    let t: V3 = [q[0] - o[0], q[1] - o[1], q[2] - o[2]];
+    const tl = Math.hypot(...t) || 1;
+    t = [t[0] / tl, t[1] / tl, t[2] / tl];
+    let side: V3 = prevSide ?? [-t[2], 0, t[0]];
+    const dot = side[0] * t[0] + side[1] * t[1] + side[2] * t[2];
+    side = [side[0] - t[0] * dot, side[1] - t[1] * dot, side[2] - t[2] * dot];
+    const sl = Math.hypot(...side) || 1;
+    side = [side[0] / sl, side[1] / sl, side[2] / sl];
+    prevSide = side;
+    const up: V3 = [t[1] * side[2] - t[2] * side[1], t[2] * side[0] - t[0] * side[2], t[0] * side[1] - t[1] * side[0]];
+    const [rx, ry] = radii(k);
+    const ring: V3[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const c = Math.cos(a) * rx;
+      const sn = Math.sin(a) * ry;
+      ring.push([p[0] + side[0] * c + up[0] * sn, p[1] + side[1] * c + up[1] * sn, p[2] + side[2] * c + up[2] * sn]);
+    }
+    rings.push(ring);
+  }
+  return rings;
+}
 
 export function ngon(cx: number, cz: number, n: number, r: number, rot0 = 0): Pt[] {
   const out: Pt[] = [];

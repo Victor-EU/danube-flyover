@@ -5,7 +5,7 @@
 
 import type { Pt, Ring } from "../lib/geom";
 import type { HeroContext } from "./context";
-import { insetPolygon, Model, ngon, surf, type Surface } from "./kit";
+import { ensureCcw, fitV, insetPolygon, Model, ngon, surf, type Surface } from "./kit";
 
 // --- Fisherman's Bastion ------------------------------------------------------------------
 
@@ -124,15 +124,20 @@ const PALACE_DOME = surf("copper", "#73a08c", 0.9);
 export function palace(ctx: HeroContext): Model[] {
   const c = ctx.centre("palace");
   const g = ctx.ground(c.x, c.z);
+  // Local -x faces the river (north-east), and z runs along the front, north positive.
   const m = new Model("palace").frame(c.x, g, c.z, 139);
   const world = ctx.footprint("relation/6486918", 0.8, 300)[0];
   const fp = world.map((r) => r.map(([x, z]) => m.local(x, z)));
   const [lo] = ctx.groundRange(world[0]);
   const H = 26;
-  m.walls(fp, lo - g - 5, H, PALACE);
+  const y0 = lo - g - 5;
+  m.walls(fp, y0, H, PALACE);
   const cornice = insetPolygon(fp, -0.45);
   if (cornice) m.walls(cornice, H - 1.1, H, PALACE_TRIM);
-  m.mansard(fp, H, 5, 6.5, PALACE_ROOF);
+  // A low mansard over the whole, so the wings' roofs and the dome stand out of it.
+  m.mansard(fp, H, 5, 4.4, PALACE_ROOF);
+  const V = fitV(PALACE, H - y0);
+  const storey = (H - y0) / (V * 2); // two storeys to a tile
   // The dome over the middle of the river front: drum, a ring of columns, the copper dome,
   // the lantern.
   const [dx, dz] = [-33, 31];
@@ -145,5 +150,62 @@ export function palace(ctx: HeroContext): Model[] {
   m.prism(dx, dz, 8, 2.2, H + 30, H + 34.5, PALACE_TRIM, null, Math.PI / 8);
   m.lathe(dx, dz, 8, [[2.6, H + 34.5], [2.2, H + 36], [1.0, H + 37.4], [0.3, H + 38.2]], PALACE_DOME, Math.PI / 8);
   m.prism(dx, dz, 4, 0.14, H + 38.2, H + 40.5, PALACE_TRIM, PALACE_TRIM);
+  // The river front, from the footprint: walls facing the river, the wings the long ones
+  // farthest forward, the centre the one under the dome.
+  const front = fp[0].flatMap((a, i, r) => {
+    const b = r[(i + 1) % r.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if ((b[1] - a[1]) / len > -0.95) return [];
+    // How deep the wall stands forward: the shorter of the walls either side of it.
+    const prev = r[(i + r.length - 1) % r.length];
+    const next = r[(i + 2) % r.length];
+    const depth = Math.min(Math.abs(a[0] - prev[0]), Math.abs(next[0] - b[0]));
+    return [{ x: Math.min(a[0], b[0]), z0: Math.min(a[1], b[1]), z1: Math.max(a[1], b[1]), len, depth }];
+  });
+  for (const w of front.filter((f) => f.len > 40 && f.x < -55)) wing(m, w.x, w.x + w.depth, w.z0, w.z1, H, storey, V);
+  const mid = front.filter((f) => f.z0 < dz && f.z1 > dz).sort((a, b) => a.x - b.x)[0];
+  if (mid) portico(m, mid.x, mid.z0 + 0.5, mid.z1 - 0.5, y0 + 4 * storey, H);
   return [m];
+}
+
+/**
+ * A projecting wing of the river front: one more storey of the facade over the cornice, its
+ * own cornice, and a hipped copper roof standing above the mansard.
+ */
+function wing(m: Model, x0: number, x1: number, z0: number, z1: number, H: number, storey: number, v0: number): void {
+  const top = H + storey;
+  const ring: Ring = ensureCcw([
+    [x0, z1],
+    [x1, z1],
+    [x1, z0],
+    [x0, z0],
+  ]);
+  // On from the facade below, so the attic's windows are the next row up.
+  for (let i = 0; i < 4; i++) m.wall(ring[i], ring[(i + 1) % 4], H, top, PALACE, { v0 });
+  m.box(x0 - 0.45, x1 + 0.45, z0 - 0.45, z1 + 0.45, top - 0.9, top + 0.3, PALACE_TRIM);
+  m.hip(x0 - 0.3, x1 + 0.3, z0 - 0.3, z1 + 0.3, top + 0.3, 6.5, PALACE_ROOF);
+}
+
+/**
+ * The river front's centre under the dome: giant columns over the lower storeys, standing on
+ * a balcony, the entablature, and an attic with a statue over each column.
+ */
+function portico(m: Model, xf: number, z0: number, z1: number, base: number, H: number): void {
+  const depth = 3.4;
+  const x = xf - 1.9;
+  m.box(xf - depth - 0.2, xf, z0 - 0.2, z1 + 0.2, base - 0.8, base, PALACE_TRIM);
+  m.box(xf - depth, xf, z0, z1, H - 1.8, H, PALACE_TRIM);
+  m.box(xf - depth - 0.3, xf + 3, z0 - 0.3, z1 + 0.3, H, H + 0.6, PALACE_TRIM);
+  m.box(xf - depth, xf + 3, z0, z1, H + 0.6, H + 2.4, PALACE_TRIM);
+  const cols = 6;
+  for (let k = 0; k < cols; k++) {
+    const z = z0 + 1.6 + ((z1 - z0 - 3.2) * k) / (cols - 1);
+    m.box(x - 1, x + 1, z - 1, z + 1, base, base + 0.8, PALACE_TRIM);
+    m.prism(x, z, 8, 0.85, base + 0.8, H - 2.6, PALACE_TRIM, null, Math.PI / 8, 0.75);
+    m.box(x - 1, x + 1, z - 1, z + 1, H - 2.6, H - 1.8, PALACE_TRIM);
+    // The statue: a figure on its plinth, against the sky.
+    m.box(x - 0.6, x + 0.6, z - 0.6, z + 0.6, H + 2.4, H + 3, PALACE_TRIM);
+    m.prism(x, z, 6, 0.45, H + 3, H + 4.8, PALACE_TRIM, null, 0, 0.32);
+    m.prism(x, z, 6, 0.24, H + 4.8, H + 5.3, PALACE_TRIM, PALACE_TRIM);
+  }
 }
