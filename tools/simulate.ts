@@ -2,13 +2,18 @@
 // world's query layer from public/data/, at 60 Hz:
 // 1. the whole tour with no input, through the end circle and the loop: beats, mode switches,
 //    camera modes, cards, tracking error and floor contacts;
-// 2. scripted checks of pause, hand-back (with the mode rule) and the beat jumps.
+// 2. scripted checks of pause, hand-back (with the mode rule) and the beat jumps;
+// 3. the lighting the tour sees: the night ramp at the two money shots, the sky's blend.
 // Usage: npm run simulate
 
 import { readFileSync } from "node:fs";
+import { Color, Vector4 } from "three";
 import { setPaused } from "../src/controller";
 import { Route, type RouteJson } from "../src/route";
 import { createSim, type Sim, stepSim } from "../src/sim";
+import { type SkyBlend, skyBlend } from "../src/sky";
+import { sunPosition } from "../src/sun";
+import { nightRamp } from "../src/world/night";
 import { buildWorld } from "../src/world/world";
 
 const data = (name: string) => readFileSync(new URL(`../public/data/${name}`, import.meta.url));
@@ -28,6 +33,7 @@ console.log(`bridges ${world.bridges.names.length}, obstacles ${world.bridges.ob
 const dt = 1 / 60;
 const mmss = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 let failures = 0;
+const lighting: { parliament: number[]; chainBridge: number[] } = { parliament: [], chainBridge: [] };
 const check = (ok: boolean, what: string) => {
   console.log(`  ${ok ? "ok  " : "FAIL"} ${what}`);
   if (!ok) failures++;
@@ -69,9 +75,16 @@ console.log("\n— Tour, no input —");
   const cardsShown: string[] = [];
   let looped = false;
   let lastS = 0;
+  // The clock at the two money shots: golden hour over Parliament, night under the Chain Bridge.
+  const parliamentClock: number[] = [];
+  const chainBridgeClock: number[] = [];
+  const chain = world.bridges.names.indexOf("Chain Bridge");
   run(sim, 60 * 15, () => {
     const v = st.vehicle;
     const ap = st.autopilot;
+    if (st.camera.target === "parliament" && ap.beat.startsWith("Parliament")) parliamentClock.push(st.timeOfDay);
+    const deck = world.bridges.deckAt(v.x, v.z, 0);
+    if (deck && deck.bridge === chain && v.y < deck.underside) chainBridgeClock.push(st.timeOfDay);
     if (st.ui.fade >= 1 && blackAt < 0) blackAt = st.t;
     if (ap.s < lastS - 100) {
       console.log(`${mmss(st.t)}  loop: back at the start (s ${ap.s.toFixed(0)}, mode ${v.mode}, clock ${st.timeOfDay.toFixed(2)} h, fade ${st.ui.fade.toFixed(2)})`);
@@ -123,6 +136,8 @@ console.log("\n— Tour, no input —");
   check(endAt > 0 && blackAt - endAt > 5.9 && blackAt - endAt < 6.2, `5 s end circle and 1 s fade (black ${(blackAt - endAt).toFixed(2)} s after the route ends)`);
   check(new Set(cardsShown).size === cardsShown.length, "each card shows once per pass");
   check(maxLateral < 25, "tracks the route within 25 m");
+  lighting.parliament = parliamentClock;
+  lighting.chainBridge = chainBridgeClock;
 }
 
 // 2a. Pause as the bird: it circles at minimum speed; the clock stops; resuming hands back at once.
@@ -241,6 +256,34 @@ console.log("\n— Jumps —");
     const want = route.modeAt(beat.s + 1) === "boat" ? "BOAT" : "BIRD";
     check(peak === 1 && st.ui.fade === 0 && Math.abs(st.autopilot.s - beat.s) < 60 && st.vehicle.mode === want, `jump to ${n}: faded, at s ${st.autopilot.s.toFixed(0)} (beat at ${beat.s.toFixed(0)}), ${st.vehicle.mode}`);
   }
+}
+
+// 3. Lighting along the tour.
+console.log("\n— Lighting —");
+{
+  const clock = (h: number) => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, "0")}`;
+  const span = (list: number[]) => (list.length ? `${clock(Math.min(...list))}–${clock(Math.max(...list))}` : "never");
+  const elev = (h: number) => sunPosition(h).elevation;
+  const p = lighting.parliament;
+  const c = lighting.chainBridge;
+  console.log(`  Parliament orbit ${span(p)}, sun ${p.length ? `${elev(Math.max(...p)).toFixed(1)}° to ${elev(Math.min(...p)).toFixed(1)}°` : "-"}`);
+  console.log(`  under the Chain Bridge ${span(c)}, sun ${c.length ? `${elev(Math.min(...c)).toFixed(1)}°` : "-"}`);
+  check(nightRamp(3) === 0 && nightRamp(-12) === 1 && Math.abs(nightRamp(-4.5) - 0.5) < 1e-9, "night ramp: 0 at +3°, 1 at -12°");
+  check(p.length > 0 && p.every((h) => elev(h) > 0 && nightRamp(elev(h)) < 0.25), "golden hour over Parliament: sun up, city lights barely on");
+  check(c.length > 0 && c.every((h) => nightRamp(elev(h)) > 0.95), "full night under the Chain Bridge");
+  // The painted skies always add up to one sky, morning and evening.
+  const b: SkyBlend = { weights: new Vector4(), painted: 0, gain: 1, tint: new Color(), night: 0, stars: 0, moon: 0 };
+  let sums = true;
+  let night = true;
+  for (let e = -30; e <= 60; e += 0.5)
+    for (const morning of [true, false]) {
+      skyBlend(e, morning, b);
+      const w = b.weights;
+      if (Math.abs(w.x + w.y + w.z - 1) > 1e-9 || (morning ? w.z : w.x) !== 0) sums = false;
+      if ((e >= -6 && b.night !== 0) || (e <= -12 && b.night !== 1)) night = false;
+    }
+  check(sums, "sky: dawn (mornings) or golden hour (evenings) plus day add up to one");
+  check(night, "sky: the night panorama fades in between -6° and -12°");
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");

@@ -1,0 +1,50 @@
+{
+  "note": "Packed by tools/pack-textures.ts from assets/raw/ (tools/gen-textures.ts). Layer order follows TEXTURES in src/config.ts.",
+  "layer": 512,
+  "surfaces": {
+    "day": "surfaces_day.webp",
+    "lit": "surfaces_lit.webp",
+    "layers": [
+      "pestEclectic",
+      "pestClassic",
+      "secession",
+      "budaBaroque",
+      "castle",
+      "modern",
+      "panel",
+      "villa",
+      "roofTile",
+      "roofSlate",
+      "roofCopper",
+      "roofFlat"
+    ],
+    "litLayers": [
+      "pestEclectic",
+      "pestClassic",
+      "secession",
+      "budaBaroque",
+      "castle",
+      "modern",
+      "panel",
+      "villa"
+    ]
+  },
+  "quay": "quay.webp",
+  "waterNormal": "water_normal.webp",
+  "skies": {
+    "dawn": "sky_dawn.webp",
+    "day": "sky_day.webp",
+    "golden": "sky_golden.webp",
+    "night": "sky_night.webp"
+  },
+  "bytes": {
+    "surfaces_day.webp": 169492,
+    "surfaces_lit.webp": 78998,
+    "quay.webp": 11298,
+    "water_normal.webp": 52872,
+    "sky_dawn.webp": 29604,
+    "sky_day.webp": 28966,
+    "sky_golden.webp": 37904,
+    "sky_night.webp": 11270
+  }
+}

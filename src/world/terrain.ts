@@ -1,14 +1,18 @@
 // Terrain from public/data/terrain.bin (built by tools/build-terrain.ts from Copernicus GLO-30
 // and OpenStreetMap): heights in metres above the river on a 10 m grid, plus a landcover class
-// per sample that colours the mesh until M3's textures arrive.
+// per sample that colours the mesh (and, at night, lights its streets).
 
 import { BufferAttribute, BufferGeometry, Color, Mesh, MeshStandardMaterial } from "three";
 import type { Grid } from "./gridFile";
+import { patchTerrain } from "./surfaces";
 
 export const TERRAIN_CELL = 10;
 
 /** Landcover classes stored per sample. */
 export const TERRAIN_CLASS = { bed: 0, street: 1, park: 2, wood: 3, square: 4, pitch: 5, rock: 6, island: 7 } as const;
+
+/** Street-light glow at night by class: streets and squares lit, parks a little, woods dark. */
+const GLOW: Record<number, number> = { 1: 1, 4: 0.85, 5: 0.25, 2: 0.12, 7: 0.05 };
 
 const PALETTE: Record<number, Color> = {
   0: new Color("#2f3f3d"),
@@ -75,6 +79,7 @@ export class Terrain {
     const { nx, nz, cell } = this;
     const pos = new Float32Array(nx * nz * 3);
     const col = new Float32Array(nx * nz * 3);
+    const glow = new Float32Array(nx * nz);
     const c = new Color();
     for (let j = 0; j < nz; j++)
       for (let i = 0; i < nx; i++) {
@@ -86,6 +91,7 @@ export class Terrain {
         col[k * 3] = c.r;
         col[k * 3 + 1] = c.g;
         col[k * 3 + 2] = c.b;
+        glow[k] = GLOW[this.classes[k]] ?? 0;
       }
     // Skip quads entirely under the water: the river surface hides them anyway.
     const index: number[] = [];
@@ -102,9 +108,12 @@ export class Terrain {
     const geo = new BufferGeometry();
     geo.setAttribute("position", new BufferAttribute(pos, 3));
     geo.setAttribute("color", new BufferAttribute(col, 3));
+    geo.setAttribute("glow", new BufferAttribute(glow, 1));
     geo.setIndex(new BufferAttribute(new Uint32Array(index), 1));
     geo.computeVertexNormals();
-    const mesh = new Mesh(geo, new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    patchTerrain(mat);
+    const mesh = new Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.name = "terrain";
     return mesh;

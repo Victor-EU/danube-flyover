@@ -101,8 +101,8 @@ All geometry comes from open data, processed once by offline scripts into static
 | Roads, tram lines, parks, trees | OSM `highway`, `railway=tram`, `leisure=park`, `natural=tree` | ODbL | Decals and instance point lists |
 | Boat route and piers | BKK GTFS open data (lines D11, D12, D14) | Open | Optional; pier positions for boat-mode stops |
 | Hero landmark meshes | Hand-modelled in Blender from reference, or generated image → image-to-3D tool → cleanup | Own work | Export glTF with day and emissive textures |
-| Facade atlases, quays, roofs | OpenAI image API, 1024×1024, tileable, flat lighting, from the style sheet | Own work (check API terms) | KTX2/Basis compression, mipmaps |
-| Skydome panoramas | OpenAI image API, 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | Generated below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
+| Facade atlases, quays, roofs | Procedural (`tools/textures/`, the current set), or the OpenAI image API, 1024×1024, tileable, flat lighting, from the style sheet | Own work (check API terms) | Packed by `pack-textures.ts`: an array texture of 512² layers in WebP now; KTX2/Basis compression, mipmaps with the full-size set |
+| Skydome panoramas | Procedural (the current set), or the OpenAI image API: 4 panoramas (dawn, day, golden hour, night), equirectangular | Own work | 2048×1024 WebP now; generated ones below target size, upscaled to 4096×2048, 360° seam and poles cleaned up; blended at runtime by time of day |
 | Landmark illustrations | OpenAI image API, one per landmark, style sheet as reference | Own work | WebP, shown in cards |
 
 **Pipeline scripts** (`tools/`, TypeScript run with tsx, run once and committed outputs; `npm run build-world` runs steps 2 to 6 in order):
@@ -111,9 +111,9 @@ All geometry comes from open data, processed once by offline scripts into static
 2. `build-water.ts`: unions and clips the river areas; writes `river.json` (water polygon, banks, centreline) and `water.glb` (river mesh with UVs for flow direction, and the quays).
 3. `build-terrain.ts`: DEM resample, river-level offset, flattening and building removal; writes `terrain.bin` (heights plus a landcover class per sample).
 4. `build-bridges.ts`: deck outlines, piers and pylons from OSM, with hand-set deck heights and styles; writes `bridges.json`.
-5. `build-city.ts`: projects, extrudes, assigns district (and, from M3, facade atlas), writes `city.glb` and `trees.json`; leaves out the buildings that `landmarks.json` says a hero replaces.
+5. `build-city.ts`: projects, extrudes, assigns district and one of eight facade styles (by type, district and height) and a roof kind, writes `city.glb` and `trees.json`; leaves out the buildings that `landmarks.json` says a hero replaces.
 6. `build-floor.ts`: combines the terrain, building and hero heights, tree crowns and bridge towers into `floor.bin`, a 5 m height grid for the bird's altitude floor. Bridge decks stay out of the grid: the runtime tests the deck outlines directly.
-7. `gen-textures.ts` (M3): prompts the image API with the style sheet attached, writes raw PNGs to `assets/raw/`; a separate step compresses to KTX2.
+7. `gen-textures.ts` (M3): paints the texture set and the style sheet, writes lossless PNGs to `assets/raw/`. The default is procedural (deterministic and offline); with `--api` it prompts the image API with the style sheet attached. `pack-textures.ts` then packs `assets/raw/` into `public/data/tex/` (WebP at the fallback sizes now; KTX2 later). `npm run textures` runs both.
 
 The autopilot spline and its beat keyframes are built at load from the hand-edited `route.json`; `npm run timetable` prints the beat timetable (each beat's start time from arc length and speed) used in the route table above.
 
@@ -121,7 +121,8 @@ The autopilot spline and its beat keyframes are built at load from the hand-edit
 
 - Generate a single style-sheet image first (a riverside street in the target style, flat midday light). Attach it to every later prompt.
 - All surface textures are lighting-neutral: flat, even light, no shadows, no sky colour, no time of day in the prompt.
-- Facades come in pairs: `facade_X_day.png` and `facade_X_lit.png` (same facade, windows glowing). The runtime crossfades the emissive channel.
+- Facades come in pairs: `facade_X_day.png` and `facade_X_lit.png` (same facade, windows glowing). The lit one is stored as the emissive layer, black wherever nothing glows (an API-generated night version has the day one subtracted). The runtime crossfades it window by window.
+- A facade is one tile of exactly 4 bays by 4 storeys (3.4 m each), one window per bay and storey: the bottom row is the ground floor, and the three rows above must repeat when stacked. Facades and roofs are near-white detail; the runtime tints them with each building's colour.
 - Request tileable output and verify seams with a quick 2×2 tile check before accepting.
 - Keep prompts in `tools/prompts/` so textures can be regenerated consistently.
 
@@ -147,11 +148,11 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `camera` | Third-person rig behind the vehicle with per-mode offsets, camera keys (1.5 s blends between camera modes), and the landing/take-off blend | vehicle pose, route camera keys | three.js camera |
 | `cards` | Landmark card triggers: radius, view cone, one at a time, once per pass | vehicle pose, camera, landmarks | current card |
 | `tour` | The loop and the beat jumps, both cut through black | autopilot, keys | fade, reset |
-| `scene` | Loads and places terrain, water, city, heroes, trees, backdrop; owns the water shader | assets | three.js scene graph |
-| `lighting` | Sun and moon directional lights, hemisphere light, sky shader, fog, emissive crossfade, night light groups; every curve keyed to sun elevation | time of day | light state |
+| `scene` | Loads and places terrain, water, city, heroes, trees, backdrop; owns the surface shaders (facades, quays, floodlights), the water shader and the night light groups with the point-light pool (`world/`) | assets | three.js scene graph |
+| `lighting` | Sun and moon directional lights, hemisphere light, the sky dome (`sky`), fog, exposure and bloom curves, the shared night ramp; every curve keyed to sun elevation | time of day | light state |
 | `hud` | Bottom bar, time slider, mode badge, OSM credit, landmark cards, about overlay | state | DOM |
 | `effects` | Boat wake, splash on landing, foam, birds, ambient boats and trams | vehicle pose, mode | scene objects |
-| `render` | Renderer, post-processing (bloom, tone mapping), resize, quality tiers | scene, camera | frame |
+| `render` | Renderer, the planar reflection pass, post-processing (bloom, tone mapping, `post`), resize, quality tiers | scene, camera | frame |
 
 **Mode state machine**: `BIRD` → `LANDING` → `BOAT` → `TAKEOFF` → `BIRD`. Landing starts when altitude drops below 2 m over water with downward velocity (manual) or on a keyframe (autopilot); it runs for 2 s during which the vehicle decelerates to boat speed and the camera lowers. Take-off is the mirror, 2.5 s, and never starts under a bridge deck or within 30 m before one. Inputs during a transition are ignored.
 
@@ -184,16 +185,16 @@ Reference for Budapest on 1 October (CEST):
 
 - Sun direction: azimuth and elevation computed for Budapest (47.5 N, 19.05 E) on 1 October, so golden hour runs 17:43–18:24, peaking around 18:00, and the sun sets behind Buda, which is correct and flattering for Parliament.
 - `DirectionalLight` for the sun: intensity curve peaks at 3.0 at noon (elevation about 39°) and falls to 0 at elevation 0°, so it never lights the scene from below the horizon; colour from warm white to deep orange as the elevation drops from 10° to 0°. Casts shadows (2048 map on high, 1024 on medium, off on low) with one cascade fitted to a 600 m box around the camera.
-- `HemisphereLight` for ambient: sky and ground colours sampled from the current skydome.
-- Sky: three.js `Sky` shader driven by the sun position while the sun is above −6°, then a crossfade to the generated night panorama between −6° and −12° (18:54 to 19:30 in the evening, mirrored before dawn). The four generated panoramas (dawn, day, golden hour, night) are blended by weight; the shader sky and the painted sky are mixed so clouds and colour stay consistent.
-- Fog: exponential fog (`FogExp2`), colour sampled from the horizon of the current sky, density highest at dawn and at night.
+- `HemisphereLight` for ambient: sky and ground colours sampled from the current skydome (a CPU twin of the dome's blend), as hues; the strength is a curve.
+- Sky: three.js `Sky` shader (its own clouds off) driven by the sun position while the sun is above −6°, then a crossfade to the generated night panorama between −6° and −12° (18:54 to 19:30 in the evening, mirrored before dawn). The four generated panoramas (dawn, day, golden hour, night) are blended by weight (dawn or golden hour into day between 4° and 14°); the shader sky and the painted sky are mixed so clouds and colour stay consistent, with the painted sky carrying the clouds. The shader sky goes black just below the horizon, so blue hour is the painted sky dimmed and tinted blue, and a soft knee keeps its glow round a low sun from burning out. Stars and the moon are drawn in the dome.
+- Fog: exponential fog (`FogExp2`), colour sampled from the horizon of the current sky (each sample capped, so the sun's side doesn't wash it out), density highest at dawn and at night.
 
 **Night**
 
-- Moon: a second directional light, cool blue, intensity 0.15, rising as the sun sets. It stays in the scene by day at intensity 0 and never casts shadows.
-- Emissive crossfade: every building material has an emissive map (the `_lit` facade texture, or a window mask for heroes). Emissive intensity ramps from 0 at sun elevation +3° to 1 at −12° (about 18:00 to 19:30, and the reverse before dawn, so the city is still lit at 06:00), with per-building random jitter of plus or minus 3° of elevation (about 20 minutes) so windows come on unevenly.
-- Named light groups, each emissive geometry and sprites: Parliament floodlights (warm white, from the water side), Chain Bridge string lights (gold, along both chains), Castle floodlights, Bastion, Gellért Hill statue, Liberty Bridge and Elisabeth Bridge deck lights, embankment lamps as emissive sprites. Groups fade in on the same ramp. Real lights are a pool of four point lights (the boat light is one of them), always in the scene, faded by intensity and reassigned to the nearest groups as the camera moves. Lights are never added or removed at runtime: three.js recompiles every material when the light count changes, which shows as a hitch.
-- Water at night: near Parliament and the Chain Bridge on medium and high tiers, planar reflections of the lit scene; everywhere else, and on low, each night light gets a stretched, glowing streak sprite on the water. Bloom (threshold 0.9, strength 0.6) makes lights bleed the way they do in photographs.
+- Moon: a second directional light, cool blue, intensity 0.15, rising in the east-south-east as the sun sets. It stays in the scene by day at intensity 0 and never casts shadows.
+- Emissive crossfade: every building material has an emissive map (the `_lit` facade texture, or a window mask for heroes). Emissive intensity ramps from 0 at sun elevation +3° to 1 at −12° (about 18:00 to 19:30, and the reverse before dawn, so the city is still lit at 06:00), with per-building random jitter of plus or minus 3° of elevation (about 20 minutes) so windows come on unevenly. Each window has its own moment on that ramp, and a share of them never comes on.
+- Named light groups, each emissive geometry and sprites: Parliament floodlights (warm white, from the water side), Chain Bridge string lights (gold, along both chains) and its floodlit towers, Castle floodlights, Bastion, Matthias Church, Gellért Hill statue and the Citadella, the riverside landmarks (Academy, Gresham, Vigadó, Gellért Hotel, Market Hall), Liberty, Elisabeth, Margaret and Árpád Bridge deck lights, embankment lamps as emissive sprites, and a faint glow on the streets and quays. Floodlights are emissive light on the surface, brightest at its foot. Groups fade in on the same ramp. Real lights are a pool of four point lights (the boat light is one of them), always in the scene, faded by intensity and reassigned to the nearest groups as the camera moves. Lights are never added or removed at runtime: three.js recompiles every material when the light count changes, which shows as a hitch. For the same reason every program is compiled before the first frame.
+- Water at night: near Parliament and the Chain Bridge on medium and high tiers, planar reflections of the lit scene; everywhere else, and on low, each night light gets a stretched, glowing streak sprite on the water, laid out by viewing angle so it's a column under the light, as on rippled water. The water's direct highlights are capped at night, so the moon makes a glitter path. Bloom (threshold 0.9, strength 0.6) makes lights bleed the way they do in photographs; by day its threshold rises with the light, or sunlit walls would bloom.
 - Street-level: a faint warm point light attached to the boat so near surfaces read.
 
 **Tone mapping**: ACES filmic, exposure as a curve over sun elevation (1.0 in daylight, 0.7 at golden hour, 0.5 at night) so highlights never blow out.

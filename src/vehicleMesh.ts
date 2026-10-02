@@ -11,7 +11,6 @@ import {
   Mesh,
   MeshStandardMaterial,
   OctahedronGeometry,
-  PointLight,
 } from "three";
 import type { State } from "./state";
 
@@ -39,7 +38,6 @@ export class VehicleMesh {
   private readonly bird = new Group();
   private readonly boat = new Group();
   private readonly wings: Group[] = [];
-  private readonly boatLight = new PointLight("#ffd9a0", 0, 40, 2);
   private flap = 0;
 
   constructor() {
@@ -87,12 +85,9 @@ export class VehicleMesh {
     const cabin = new Mesh(new BoxGeometry(1.2, 0.7, 1.3), hullMat);
     cabin.position.set(0, 1.0, 0.5);
     this.boat.add(hull, band, deck, cabin);
-    // The lamp hangs off the always-visible group, not the boat, and casts no shadow: a light
-    // inside a hidden group drops out of three's light list, so a change in the light count
-    // recompiled every material at each landing, and the shadow it had picked up from the
-    // castShadow loop below was never rendered at night (black frames on the boat).
-    this.boatLight.position.set(0, 2.2, 0.4);
-    this.group.add(this.boatLight);
+    // The boat's lamp is one of the night lights' pool (nightLights.ts), in the scene root: a
+    // light inside this group, which is hidden in flight, would drop out of three's light list
+    // and recompile every material at each landing.
 
     for (const m of [...this.bird.children, ...this.boat.children]) {
       m.castShadow = true;
@@ -122,8 +117,5 @@ export class VehicleMesh {
     const a = Math.sin(this.flap) * amp;
     this.wings[0].rotation.z = a;
     this.wings[1].rotation.z = -a;
-
-    // The boat's lamp is the pooled warm light; it fades in after sunset.
-    this.boatLight.intensity = v.boatness * Math.min(1, Math.max(0, -st.sun.elevation / 6)) * 6;
   }
 }

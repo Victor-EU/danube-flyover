@@ -4,6 +4,7 @@
 
 import { BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshStandardMaterial, PlaneGeometry, type Object3D } from "three";
 import { WORLD } from "../config";
+import type { TextureSet } from "../textures";
 import { worldBounds, type Bounds } from "./bounds";
 import { Bridges, type BridgesJson } from "./bridges";
 import { Floor } from "./floor";
@@ -11,7 +12,9 @@ import { decodeGrid } from "./gridFile";
 import { buildSights, Landmarks, type LandmarksJson, type Sight } from "./landmarks";
 import { River, type RiverJson } from "./river";
 import { Terrain } from "./terrain";
+import { patchBuildings, patchQuays } from "./surfaces";
 import { buildTrees, type TreesJson } from "./trees";
+import { LAYER } from "./water";
 
 export interface WorldFiles {
   river: RiverJson;
@@ -22,10 +25,11 @@ export interface WorldFiles {
   floor: ArrayBuffer | Uint8Array;
 }
 
-/** The glTF scenes from city.glb and water.glb, already loaded (browser only). */
+/** The glTF scenes from city.glb and water.glb and the texture set, already loaded (browser only). */
 export interface WorldModels {
   city: Object3D;
   water: Object3D;
+  textures: TextureSet;
 }
 
 export interface World {
@@ -38,8 +42,9 @@ export interface World {
   landmarks: Landmarks | null;
   /** Every landmark's position and aim point, for the cards and the orbit camera. */
   sights: Sight[];
-  /** The shared water material; lighting tints it toward the horizon colour (M3 adds reflections). */
+  /** The river's material (water.ts makes it reflect), and the ponds' (no planar reflection). */
   water: MeshStandardMaterial;
+  pond: MeshStandardMaterial;
   group: Group;
   /** Milliseconds per build step, for the debug panel. */
   timings: Record<string, number>;
@@ -59,7 +64,8 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
   const floor = time("floor", () => new Floor(decodeGrid(files.floor)));
   const bridges = time("bridges", () => new Bridges(files.bridges, river, terrain, !!models));
   const sights = buildSights(files.landmarks, (x, z) => terrain.heightAt(x, z));
-  const water = new MeshStandardMaterial({ color: "#3b7680", roughness: 0.55, metalness: 0 });
+  const water = new MeshStandardMaterial({ color: "#3b7680", roughness: 0.55, metalness: 0, name: "river" });
+  const pond = new MeshStandardMaterial({ color: "#3b7680", roughness: 0.55, metalness: 0, name: "pond" });
   const group = new Group();
   let landmarks: Landmarks | null = null;
 
@@ -68,28 +74,38 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
     group.add(time("apron", () => buildApron(terrain)));
     group.add(buildFrame(river, bounds, water));
     time("models", () => {
+      const patched = new Set<MeshStandardMaterial>();
       for (const root of [models.city, models.water])
         root.traverse((o) => {
           if (!(o as Mesh).isMesh) return;
           const mesh = o as Mesh;
           const mat = mesh.material as MeshStandardMaterial;
           if (mat.name === "water") {
-            mesh.material = water;
+            // The river (water.glb) reflects the scene; the ponds (city.glb) only the sky.
+            const river = root === models.water;
+            mesh.material = river ? water : pond;
             mesh.receiveShadow = true;
-          } else {
-            mesh.castShadow = mesh.name.startsWith("buildings");
-            mesh.receiveShadow = true;
-            mat.flatShading = false;
+            mesh.layers.set(LAYER.water);
+            return;
           }
+          mesh.castShadow = mesh.name.startsWith("buildings");
+          mesh.receiveShadow = true;
+          mat.flatShading = false;
+          if (patched.has(mat)) return;
+          patched.add(mat);
+          if (mat.name === "building") patchBuildings(mat, models.textures);
+          else if (mat.name === "quay") patchQuays(mat, models.textures.quay);
         });
       group.add(models.city, models.water);
     });
     landmarks = time("landmarks", () => new Landmarks(files.landmarks, (x, z) => terrain.heightAt(x, z)));
     group.add(landmarks.group);
-    group.add(time("trees", () => buildTrees(files.trees, terrain)));
+    const trees = time("trees", () => buildTrees(files.trees, terrain));
+    trees.layers.set(LAYER.trees);
+    group.add(trees);
     group.add(bridges.group);
   }
-  return { bounds, river, terrain, floor, bridges, landmarks, sights, water, group, timings };
+  return { bounds, river, terrain, floor, bridges, landmarks, sights, water, pond, group, timings };
 }
 
 /**
@@ -171,6 +187,13 @@ function buildFrame(river: River, b: Bounds, water: MeshStandardMaterial): Group
     const mesh = new Mesh(geo, m);
     mesh.position.set((x0 + x1) / 2, h, (z0 + z1) / 2);
     mesh.receiveShadow = true;
+    if (m === water) {
+      // Flow coordinates like the river mesh's: u runs south (downstream), v east, in metres.
+      const pos = geo.attributes.position;
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getZ(i) + mesh.position.z, pos.getX(i) + mesh.position.x);
+      mesh.layers.set(LAYER.water);
+    }
     group.add(mesh);
   };
   rect(-FAR, b.x0, b.z0, b.z1, mat, y); // west

@@ -104,3 +104,34 @@ export const PAUSE = {
 
 /** The sunset-run clock eases toward the route's clock with this time constant (s). */
 export const CLOCK_EASE = 1.5;
+
+/**
+ * The texture set (tools/gen-textures.ts paints it, tools/pack-textures.ts packs it into
+ * public/data/tex/). Facade tiles are 4 bays by 4 storeys: the bottom row is the ground
+ * floor, the three above repeat up the building. Layer order is the array texture's.
+ */
+export const TEXTURES = {
+  storey: 3.4,
+  bays: 4,
+  facades: ["pestEclectic", "pestClassic", "secession", "budaBaroque", "castle", "modern", "panel", "villa"],
+  roofs: ["roofTile", "roofSlate", "roofCopper", "roofFlat"],
+  /** Metres covered by one roof and one quay tile. */
+  roofTile: 8,
+  quayTile: 4,
+  /** Water normal-map tile, metres. */
+  waterTile: 24,
+  /** Facades and roofs are near-white detail, tinted by the building's own colour times this. */
+  tintGain: 1.22,
+  skies: ["dawn", "day", "golden", "night"],
+};
+
+/** Rendering quality (M4 turns this into the low/medium/high tiers of quality.json). */
+export const QUALITY = {
+  shadowMapSize: 2048,
+  /** Planar reflections near Parliament and the Chain Bridge, at this fraction of the screen. */
+  reflections: true,
+  reflectionScale: 0.5,
+  bloom: true,
+  /** MSAA samples for the HDR scene target (the composer replaces the canvas's own AA). */
+  samples: 4,
+};

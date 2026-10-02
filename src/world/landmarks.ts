@@ -19,6 +19,7 @@ import {
 } from "three";
 import { WORLD } from "../config";
 import { lonLatToLocal } from "../geo";
+import { LAYER } from "./water";
 
 export interface PartJson {
   shape: "box" | "cyl" | "cone";
@@ -213,5 +214,6 @@ function makeLabel(text: string): Sprite {
   sprite.scale.set((w / 76) * h, h, 1);
   sprite.center.set(0.5, 0);
   sprite.name = `label:${text}`;
+  sprite.layers.set(LAYER.labels);
   return sprite;
 }

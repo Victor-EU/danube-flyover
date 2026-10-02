@@ -17,7 +17,11 @@
     "build-bridges": "tsx tools/build-bridges.ts",
     "build-city": "tsx tools/build-city.ts",
     "build-floor": "tsx tools/build-floor.ts",
-    "build-world": "npm run build-water && npm run build-terrain && npm run build-bridges && npm run build-city && npm run build-floor"
+    "build-world": "npm run build-water && npm run build-terrain && npm run build-bridges && npm run build-city && npm run build-floor",
+    "gen-textures": "tsx tools/gen-textures.ts",
+    "pack-textures": "tsx tools/pack-textures.ts",
+    "textures": "npm run gen-textures && npm run pack-textures",
+    "record": "tsx tools/record.ts"
   },
   "dependencies": {
     "fflate": "^0.8.3",
@@ -35,6 +39,7 @@
     "meshoptimizer": "^1.3.0",
     "osmtogeojson": "^3.0.0-beta.5",
     "polygon-clipping": "^0.15.7",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"

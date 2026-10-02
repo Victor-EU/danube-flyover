@@ -1,20 +1,23 @@
-// Sun, hemisphere light, three.js Sky and fog, all driven by one number (timeOfDay) through
-// curves over the sun's elevation, so dawn mirrors dusk. Lights are created once and only
-// their intensities change: adding or removing lights would recompile every material.
+// Sun, moon, hemisphere light, sky, fog, exposure and bloom, all driven by one number
+// (timeOfDay) through curves over the sun's elevation, so dawn mirrors dusk. The hemisphere's
+// colours and the fog's are sampled from the sky dome as it is this frame. Lights are created
+// once and only their intensities change: adding or removing lights would recompile every
+// material.
 
 import {
   Color,
   DirectionalLight,
   FogExp2,
   HemisphereLight,
-  type MeshStandardMaterial,
   type Scene,
   Vector3,
   type WebGLRenderer,
 } from "three";
-import { Sky } from "three/addons/objects/Sky.js";
+import { QUALITY } from "./config";
+import type { SkyDome } from "./sky";
 import type { State } from "./state";
 import { sunPosition } from "./sun";
+import { nightRamp, SHARED } from "./world/night";
 
 type Keys = [number, number][];
 type ColorKeys = [number, string][];
@@ -22,17 +25,25 @@ type ColorKeys = [number, string][];
 // All keyed on sun elevation in degrees, ascending.
 const SUN_INTENSITY: Keys = [[-90, 0], [0, 0], [2, 0.7], [6, 1.5], [15, 2.3], [39, 3]];
 const SUN_COLOR: ColorKeys = [[0, "#ff6a2a"], [2, "#ff8c42"], [6, "#ffb469"], [10, "#ffdcae"], [20, "#fff1de"]];
-// Night stays legible as a blue, moonlit grey box; M3 replaces this with emissive windows and light groups.
-const HEMI_SKY: ColorKeys = [[-18, "#34436f"], [-12, "#3a4a78"], [-6, "#56608c"], [0, "#c99079"], [4, "#e6b78d"], [10, "#bcd2ea"], [40, "#a9c8ec"]];
-const HEMI_GROUND: ColorKeys = [[-12, "#1a1d28"], [0, "#5a4636"], [10, "#8b7a63"], [40, "#8f8068"]];
-const HEMI_INTENSITY: Keys = [[-18, 2.2], [-12, 2.0], [-6, 1.4], [0, 1.0], [6, 1.05], [10, 1.0], [40, 1.1]];
-/** How much of the horizon colour the water picks up, standing in for sky reflection until M3. */
-const WATER_SKY: Keys = [[-18, 0.25], [-6, 0.2], [0, 0.15], [10, 0.08], [40, 0.05]];
-const FOG_COLOR: ColorKeys = [[-18, "#0b1020"], [-12, "#161d33"], [-6, "#4b4d6b"], [0, "#d6a283"], [4, "#e6bf98"], [10, "#c8d4df"], [40, "#c0d0df"]];
+/**
+ * The hemisphere's colours come from the sky at unit luminance; this is its strength. Night
+ * is a dim moonlit blue now that lit windows and the light groups carry the city.
+ */
+const HEMI_INTENSITY: Keys = [[-18, 0.06], [-12, 0.07], [-6, 0.15], [0, 0.32], [6, 0.5], [10, 0.6], [40, 0.66]];
+/** The ground half is the haze below the horizon, this much darker than the sky half. */
+const HEMI_GROUND: Keys = [[-12, 0.2], [0, 0.25], [10, 0.33]];
 const FOG_DENSITY: Keys = [[-18, 0.00034], [-6, 0.00032], [0, 0.00028], [6, 0.00022], [15, 0.00017], [40, 0.00016]];
 const EXPOSURE: Keys = [[-12, 0.5], [0, 0.7], [6, 0.7], [10, 1], [40, 1]];
 const TURBIDITY: Keys = [[0, 9], [10, 5], [40, 3]];
 const RAYLEIGH: Keys = [[-6, 3], [0, 2.6], [10, 1.4], [40, 1]];
+/**
+ * Bloom: the design's threshold 0.9 and strength 0.6 at night. By day the threshold rises with
+ * the light, or every sunlit wall would bloom (the threshold applies before the exposure).
+ */
+const BLOOM_STRENGTH: Keys = [[-12, 0.6], [-3, 0.55], [2, 0.42], [10, 0.3], [40, 0.25]];
+const BLOOM_THRESHOLD: Keys = [[-12, 0.9], [-6, 1.0], [0, 1.5], [6, 2.2], [15, 3.0], [40, 3.4]];
+/** The moon: cool blue, at most 0.15, rising in the east as the sun sets. */
+const MOON = { color: "#9fb4ff", intensity: 0.15, azimuth: 124 };
 
 function curve(keys: Keys, e: number): number {
   if (e <= keys[0][0]) return keys[0][1];
@@ -56,21 +67,40 @@ function colorCurve(keys: ColorKeys, e: number, out: Color): Color {
   return out.set(keys[keys.length - 1][1]);
 }
 
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** A direction from compass azimuth and elevation (degrees): +X east, +Y up, +Z south. */
+function direction(azimuth: number, elevation: number, out: Vector3): Vector3 {
+  const az = (azimuth * Math.PI) / 180;
+  const el = (elevation * Math.PI) / 180;
+  return out.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+}
+
 const SHADOW_HALF = 300; // 600 m box around the camera focus
 /** Far enough up-sun to catch the long shadows of a low sun (a 30 m roof at 2° reaches 860 m). */
 const SUN_DISTANCE = 1100;
 
 export class Lighting {
   readonly sun = new DirectionalLight("#ffffff", 3);
+  readonly moon = new DirectionalLight(MOON.color, 0);
   readonly hemi = new HemisphereLight("#bcd2ea", "#8b7a63", 1);
-  readonly sky = new Sky();
   readonly fog = new FogExp2("#c8d4df", 0.0002);
+  /** Exposure and bloom for the post chain, set each frame. */
+  readonly post = { exposure: 1, bloomStrength: 0.3, bloomThreshold: 2, bloomRadius: 0.45 };
   private readonly dir = new Vector3();
+  private readonly moonDir = new Vector3();
+  private readonly sample = new Color();
 
-  constructor(scene: Scene, private readonly water?: MeshStandardMaterial) {
+  constructor(
+    scene: Scene,
+    private readonly sky: SkyDome,
+  ) {
     this.sun.castShadow = true;
     const sh = this.sun.shadow;
-    sh.mapSize.set(2048, 2048);
+    sh.mapSize.set(QUALITY.shadowMapSize, QUALITY.shadowMapSize);
     sh.camera.left = -SHADOW_HALF;
     sh.camera.right = SHADOW_HALF;
     sh.camera.top = SHADOW_HALF;
@@ -80,15 +110,8 @@ export class Lighting {
     sh.camera.far = SUN_DISTANCE + 400;
     sh.bias = -0.0004;
     sh.normalBias = 0.8;
-    scene.add(this.sun, this.sun.target, this.hemi);
-
-    this.sky.scale.setScalar(15000);
-    const u = this.sky.material.uniforms;
-    u.mieCoefficient.value = 0.006;
-    u.mieDirectionalG.value = 0.82;
-    u.cloudCoverage.value = 0.32;
-    u.cloudDensity.value = 0.35;
-    scene.add(this.sky);
+    // The moon never casts shadows; it stays in the scene by day at intensity 0.
+    scene.add(this.sun, this.sun.target, this.moon, this.moon.target, this.hemi, sky.mesh);
     scene.fog = this.fog;
   }
 
@@ -97,17 +120,23 @@ export class Lighting {
     st.sun.elevation = sp.elevation;
     st.sun.azimuth = sp.azimuth;
     const e = sp.elevation;
-    const az = (sp.azimuth * Math.PI) / 180;
-    const el = (e * Math.PI) / 180;
-    // Scene frame: +X east, +Y up, +Z south.
-    this.dir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+    direction(sp.azimuth, e, this.dir);
+    const morning = sp.azimuth < 180;
 
-    const u = this.sky.material.uniforms;
-    u.sunPosition.value.copy(this.dir);
-    u.turbidity.value = curve(TURBIDITY, e);
-    u.rayleigh.value = curve(RAYLEIGH, e);
-    u.time.value += dt;
-    this.sky.position.copy(cameraPos);
+    // The moon rises in the east-south-east as the sun goes down (and sets again toward dawn).
+    const moonEl = Math.min(36, 6 - e * 0.9);
+    direction(MOON.azimuth, moonEl, this.moonDir);
+    this.moon.intensity = MOON.intensity * smooth(-1, -8, e) * smooth(-2, 6, moonEl);
+    this.moon.position.copy(focus).addScaledVector(this.moonDir, 1000);
+    this.moon.target.position.copy(focus);
+
+    SHARED.uSunElevation.value = e;
+    SHARED.uNight.value = smooth(0, 1, nightRamp(e));
+    SHARED.uTime.value += dt;
+
+    this.sky.update(this.dir, e, morning, curve(TURBIDITY, e), curve(RAYLEIGH, e), this.moonDir, SHARED.uTime.value);
+    this.sky.mesh.position.copy(cameraPos);
+    this.sky.renderEnv(renderer, e);
 
     this.sun.intensity = curve(SUN_INTENSITY, e);
     // With the sun down the shadow map is unused: stop re-rendering it (toggling castShadow
@@ -119,21 +148,47 @@ export class Lighting {
     colorCurve(SUN_COLOR, e, this.sun.color);
     this.placeShadow(focus);
 
+    this.sampleSky();
     this.hemi.intensity = curve(HEMI_INTENSITY, e);
-    colorCurve(HEMI_SKY, e, this.hemi.color);
-    colorCurve(HEMI_GROUND, e, this.hemi.groundColor);
-
-    colorCurve(FOG_COLOR, e, this.fog.color);
     this.fog.density = curve(FOG_DENSITY, e);
-    if (this.water) this.water.emissive.copy(this.fog.color).multiplyScalar(curve(WATER_SKY, e));
-    renderer.toneMappingExposure = curve(EXPOSURE, e);
+
+    const p = this.post;
+    p.exposure = curve(EXPOSURE, e);
+    p.bloomStrength = curve(BLOOM_STRENGTH, e);
+    p.bloomThreshold = curve(BLOOM_THRESHOLD, e);
+    renderer.toneMappingExposure = p.exposure;
+  }
+
+  /**
+   * The hemisphere's sky colour is the dome's average over the upper sky, its ground colour
+   * the haze under the horizon (both as hues: the curves set the strength); the fog is the
+   * horizon itself, so distant land fades into the sky behind it.
+   */
+  private sampleSky(): void {
+    const s = this.sample;
+    const up = tmpUp.setRGB(0, 0, 0);
+    const horizon = tmpHorizon.setRGB(0, 0, 0);
+    const below = tmpBelow.setRGB(0, 0, 0);
+    for (let k = 0; k < 8; k++) {
+      const az = k * 45;
+      for (const el of [18, 45, 75]) up.add(this.sky.sample(...dirArgs(az, el), s));
+      // Each horizon sample is capped, so the glow round a low sun doesn't wash out all the haze.
+      horizon.add(capLuminance(this.sky.sample(...dirArgs(az, 1.5), s), FOG_CAP));
+      below.add(this.sky.sample(...dirArgs(az, -8), s));
+    }
+    up.multiplyScalar(1 / 24);
+    horizon.multiplyScalar(1 / 8);
+    below.multiplyScalar(1 / 8);
+    hue(up, this.hemi.color, 0.75);
+    hue(below, this.hemi.groundColor, 0.6).multiplyScalar(curve(HEMI_GROUND, SHARED.uSunElevation.value));
+    this.fog.color.copy(horizon);
   }
 
   /** Centre the shadow box on the focus, snapped to shadow-map texels so edges don't shimmer. */
   private placeShadow(focus: Vector3): void {
     const d = this.dir.y < 0.05 ? tmpDir.copy(this.dir).setY(0.05).normalize() : this.dir;
     const right = tmpRight.crossVectors(UP, d).normalize();
-    const up = tmpUp.crossVectors(d, right);
+    const up = tmpUp3.crossVectors(d, right);
     const texel = (SHADOW_HALF * 2) / this.sun.shadow.mapSize.x;
     const px = focus.dot(right);
     const py = focus.dot(up);
@@ -146,8 +201,32 @@ export class Lighting {
   }
 }
 
+const tmpV = new Vector3();
+function dirArgs(azimuth: number, elevation: number): [number, number, number] {
+  direction(azimuth, elevation, tmpV);
+  return [tmpV.x, tmpV.y, tmpV.z];
+}
+
+const FOG_CAP = 0.6;
+
+function capLuminance(c: Color, cap: number): Color {
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  return lum > cap ? c.multiplyScalar(cap / lum) : c;
+}
+
+/** A colour's hue at unit luminance, partly desaturated (`saturation` 1 keeps it). */
+function hue(c: Color, out: Color, saturation: number): Color {
+  const lum = Math.max(1e-5, 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+  out.setRGB(c.r / lum, c.g / lum, c.b / lum);
+  return out.lerp(tmpGrey.setRGB(1, 1, 1), 1 - saturation);
+}
+
 const UP = new Vector3(0, 1, 0);
 const tmpDir = new Vector3();
 const tmpRight = new Vector3();
-const tmpUp = new Vector3();
+const tmpUp3 = new Vector3();
 const tmpTarget = new Vector3();
+const tmpUp = new Color();
+const tmpHorizon = new Color();
+const tmpBelow = new Color();
+const tmpGrey = new Color();

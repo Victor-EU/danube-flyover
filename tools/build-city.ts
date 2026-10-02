@@ -10,7 +10,7 @@
 
 import earcut from "earcut";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { WORLD } from "../src/config";
+import { TEXTURES, WORLD } from "../src/config";
 import { lonLatToLocal } from "../src/geo";
 import { worldBounds } from "../src/world/bounds";
 import { Bridges, type BridgesJson } from "../src/world/bridges";
@@ -100,7 +100,27 @@ interface Building {
   top: number;
   wall: [number, number, number];
   roof: [number, number, number];
+  /** Layers in the runtime's surface array: TEXTURES.facades, then TEXTURES.roofs. */
+  facade: number;
+  roofLayer: number;
   seed: number;
+}
+
+// --- Facade styles ------------------------------------------------------------------------------
+
+const F = Object.fromEntries(TEXTURES.facades.map((name, i) => [name, i])) as Record<string, number>;
+const ROOF_LAYER = { tile: 8, slate: 9, copper: 10, flat: 11 };
+const PANEL_DISTRICTS = new Set(["III. kerület", "XIII. kerület", "XI. kerület"]);
+/** Which of the eight facade tiles a building wears, by type, district, height and bank. */
+function facadeOf(type: string, district: string, height: number, castle: boolean, u: number): number {
+  if (MODERN.has(type) || height > 32) return F.modern;
+  if (SMALL.has(type) || HOUSE.has(type)) return F.villa;
+  if (castle) return F.castle;
+  if (PANEL_DISTRICTS.has(district) && height >= 18 && (type === "apartments" || type === "residential" || type === "yes") && u < 0.4) return F.panel;
+  if (BUDA.has(district)) return height < 14 ? F.budaBaroque : u < 0.7 ? F.pestEclectic : F.pestClassic;
+  if (height < 9) return F.villa;
+  if (u < 0.16) return F.secession;
+  return district === "V. kerület" ? (u < 0.6 ? F.pestClassic : F.pestEclectic) : u < 0.3 ? F.pestClassic : F.pestEclectic;
 }
 
 const buildings: Building[] = [];
@@ -148,10 +168,11 @@ for (const f of readOsm("buildings")) {
     const type = p.building ?? "yes";
     const castle = district === "I. kerület" && gAvg > 45;
     const walls = MODERN.has(type) ? WALLS.modern : castle ? WALLS.castle : BUDA.has(district) ? WALLS.buda : WALLS.pest;
-    let roofs: [number, number, number][];
-    if (type === "church" || type === "cathedral" || type === "chapel") roofs = ur < 0.5 ? ROOFS.slate : ROOFS.copper;
-    else if (MODERN.has(type) || height > 32) roofs = ROOFS.flat;
-    else roofs = ur < 0.5 ? ROOFS.tile : ur < 0.85 ? ROOFS.slate : ROOFS.flat;
+    let roofKind: keyof typeof ROOFS;
+    if (type === "church" || type === "cathedral" || type === "chapel") roofKind = ur < 0.5 ? "slate" : "copper";
+    else if (MODERN.has(type) || height > 32) roofKind = "flat";
+    else roofKind = ur < 0.5 ? "tile" : ur < 0.85 ? "slate" : "flat";
+    const roofs = ROOFS[roofKind];
     buildings.push({
       id: `${p.id}${k ? `#${k}` : ""}`,
       district,
@@ -160,6 +181,8 @@ for (const f of readOsm("buildings")) {
       top: gAvg + height,
       wall: pick(walls, u),
       roof: pick(roofs, hash01(`${p.id}#${k}:roofshade`)),
+      facade: facadeOf(type, district, height, castle, hash01(`${p.id}#${k}:facade`)),
+      roofLayer: ROOF_LAYER[roofKind],
       seed,
     });
     sources[source]++;
@@ -174,24 +197,29 @@ class MeshBuilder {
   col: number[] = [];
   uv: number[] = [];
   seed: number[] = [];
+  facade: number[] = [];
   idx: number[] = [];
-  vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number, c: number[], u: number, v: number, s: number): number {
+  /** `layer` is the surface-array layer; `h` the building's wall height (for the cornice). */
+  vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number, c: number[], u: number, v: number, s: number, layer: number, h: number): number {
     this.pos.push(x, y, z);
     this.nor.push(nx, ny, nz);
     this.col.push(c[0], c[1], c[2]);
     this.uv.push(u / UV_UNIT, v / UV_UNIT);
     this.seed.push(s);
+    this.facade.push(layer / FACADE_LAYER_UNIT, h / FACADE_HEIGHT_UNIT);
     return this.pos.length / 3 - 1;
   }
 }
 
-const AO = 0.72; // wall colour at street level, for a little ambient occlusion
+/** _FACADE stores (layer / 16, wall height / 128 m), so it quantises into [0, 1]. */
+const FACADE_LAYER_UNIT = 16;
+const FACADE_HEIGHT_UNIT = 128;
 const perDistrict = new Map<string, MeshBuilder>();
 for (const bd of buildings) {
   let m = perDistrict.get(bd.district);
   if (!m) perDistrict.set(bd.district, (m = new MeshBuilder()));
   const { base, top, seed } = bd;
-  const low = bd.wall.map((c) => c * AO);
+  const h = top - base;
   // Walls: a quad per edge with its own normal (flat shading), u along the perimeter.
   for (const ring of bd.poly) {
     let along = 0;
@@ -204,10 +232,11 @@ for (const bd of buildings) {
       if (l < 0.05) continue;
       const nx = ez / l;
       const nz = -ex / l;
-      const A = m.vertex(a[0], base, a[1], nx, 0, nz, low, along, 0, seed);
-      const B = m.vertex(c[0], base, c[1], nx, 0, nz, low, along + l, 0, seed);
-      const C = m.vertex(c[0], top, c[1], nx, 0, nz, bd.wall, along + l, top - base, seed);
-      const D = m.vertex(a[0], top, a[1], nx, 0, nz, bd.wall, along, top - base, seed);
+      // The runtime shades the foot of the wall (ambient occlusion) from v, the height above the base.
+      const A = m.vertex(a[0], base, a[1], nx, 0, nz, bd.wall, along, 0, seed, bd.facade, h);
+      const B = m.vertex(c[0], base, c[1], nx, 0, nz, bd.wall, along + l, 0, seed, bd.facade, h);
+      const C = m.vertex(c[0], top, c[1], nx, 0, nz, bd.wall, along + l, h, seed, bd.facade, h);
+      const D = m.vertex(a[0], top, a[1], nx, 0, nz, bd.wall, along, h, seed, bd.facade, h);
       m.idx.push(A, C, B, A, D, C);
       along += l;
     }
@@ -222,7 +251,7 @@ for (const bd of buildings) {
   const tris = earcut(flat, holes, 2);
   const [cx, cz] = centroid(bd.poly[0]);
   const first = m.pos.length / 3;
-  for (let i = 0; i < flat.length; i += 2) m.vertex(flat[i], top, flat[i + 1], 0, 1, 0, bd.roof, flat[i] - cx + UV_UNIT / 2, flat[i + 1] - cz + UV_UNIT / 2, seed);
+  for (let i = 0; i < flat.length; i += 2) m.vertex(flat[i], top, flat[i + 1], 0, 1, 0, bd.roof, flat[i] - cx + UV_UNIT / 2, flat[i + 1] - cz + UV_UNIT / 2, seed, bd.roofLayer, h);
   for (let t = 0; t < tris.length; t += 3) {
     const [a, c, d] = [tris[t], tris[t + 1], tris[t + 2]];
     const cross = (flat[c * 2] - flat[a * 2]) * (flat[d * 2 + 1] - flat[a * 2 + 1]) - (flat[c * 2 + 1] - flat[a * 2 + 1]) * (flat[d * 2] - flat[a * 2]);
@@ -243,7 +272,7 @@ for (const [name, m] of [...perDistrict.entries()].sort((p, q) => p[0].localeCom
     color: new Float32Array(m.col),
     uv: new Float32Array(m.uv),
     index: new Uint32Array(m.idx),
-    extra: { _SEED: { array: new Float32Array(m.seed), size: 1 } },
+    extra: { _SEED: { array: new Float32Array(m.seed), size: 1 }, _FACADE: { array: new Float32Array(m.facade), size: 2 } },
     extras: { district: name, buildings: buildings.filter((x) => x.district === name).length },
   });
 }
@@ -286,7 +315,7 @@ for (const [name, m] of [...perDistrict.entries()].sort((p, q) => p[0].localeCom
   meshes.push({ name: "ponds", material: { name: "water", color: [0.231, 0.463, 0.502], roughness: 0.55 }, position: new Float32Array(pos), normal: nor, index: new Uint32Array(idx), extras: { ponds: count } });
 }
 
-const glb = await writeGlb("city.glb", meshes, { license: ODBL, uvUnit: UV_UNIT });
+const glb = await writeGlb("city.glb", meshes, { license: ODBL, uvUnit: UV_UNIT, facadeLayerUnit: FACADE_LAYER_UNIT, facadeHeightUnit: FACADE_HEIGHT_UNIT });
 
 // --- Trees ----------------------------------------------------------------------------------------
 
@@ -374,5 +403,7 @@ writeFileSync(
 
 console.log(`buildings: ${buildings.length} (height tag ${sources.height}, levels ${sources.levels}, default ${sources.default}); skipped ${JSON.stringify(skipped)}`);
 console.log(`districts: ${[...perDistrict.keys()].join(", ")}`);
+const styleCount = TEXTURES.facades.map((name, i) => `${name} ${buildings.filter((x) => x.facade === i).length}`);
+console.log(`facades: ${styleCount.join(", ")}`);
 console.log(`city.glb ${kb(glb)}, ${tris} building triangles`);
 console.log(`trees.json ${kb(treesSize)}: ${treeCount} trees (${fromOsm} OSM tree points before filtering)`);

@@ -42,6 +42,8 @@ export class Hud {
     private readonly sim: Sim,
     /** The renderer's per-frame counters (renderer.info.render). */
     private readonly renderInfo: { calls: number; triangles: number },
+    /** More debug lines from the render side (lighting, water, night lights). */
+    private readonly extra: () => string[] = () => [],
   ) {
     const st = sim.st;
     this.slider.value = String(st.timeOfDay);
@@ -146,6 +148,7 @@ export class Hud {
       `camera     ${cam.mode}${cam.target ? ` → ${cam.target}` : ""}  key ${cam.key}${cam.blend < 1 ? `  blend ${cam.blend.toFixed(2)}` : ""}${cam.suspended ? "  (suspended)" : ""}`,
       `card       ${st.cards.id ? `${st.cards.id} ${st.cards.age.toFixed(1)} s${st.cards.expanded ? " (open)" : ""}` : "-"}`,
       `sun        ${st.sun.elevation.toFixed(1)}°  az ${st.sun.azimuth.toFixed(0)}°`,
+      ...this.extra(),
       `draw       ${this.renderInfo.calls} calls, ${(this.renderInfo.triangles / 1e6).toFixed(2)} M triangles (all passes)`,
       `build ms   ${Object.entries(world.timings).map(([k, ms]) => `${k} ${ms}`).join(", ")}`,
     ].join("\n");

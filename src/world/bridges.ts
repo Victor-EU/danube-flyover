@@ -77,10 +77,25 @@ interface Deck {
   box: [number, number, number, number];
 }
 
+/** What the night lights hang on a bridge (browser only). */
+export interface BridgeLights {
+  name: string;
+  /** The tower, pier and cable material, and the chains' own (Chain Bridge). */
+  material: MeshStandardMaterial;
+  chain: MeshStandardMaterial | null;
+  /** Cable or chain curves, one per side. */
+  cables: Vector3[][];
+  /** Lamp posts along both deck edges where the deck is at full height, every ~22 m. */
+  deckLamps: Vector3[];
+  /** Tower tops and bases, for the floodlights' height range. */
+  towerTop: number;
+}
+
 export class Bridges {
   readonly group = new Group();
   readonly obstacles: Obstacle[] = [];
   readonly names: string[];
+  readonly lights: BridgeLights[] = [];
   private readonly decks: Deck[];
 
   constructor(data: BridgesJson, private readonly river: River, private readonly terrain: Terrain, withMeshes = true) {
@@ -117,6 +132,7 @@ export class Bridges {
       m.castShadow = m.receiveShadow = true;
       m.name = def.name;
       this.group.add(m);
+      this.lights.push({ name: def.name, material: mat, chain: null, cables: [], deckLamps: this.deckLamps(def), towerTop: def.tower?.height ?? def.top + 8 });
     }
 
     for (const p of def.piers) {
@@ -242,6 +258,8 @@ export class Bridges {
     const peakY = def.cables === "truss" ? def.top + 14 : tw.height - 3;
     const lowY = def.cables === "truss" ? def.top + 2.5 : deckY + 2;
     const mat = def.cables === "chain" ? new MeshStandardMaterial({ color: "#3b3a37", roughness: 0.6, flatShading: true }) : mat0;
+    const lights = this.lights.find((l) => l.name === def.name)!;
+    if (def.cables === "chain") lights.chain = mat;
     const ux = towers[0].ux;
     const uz = towers[0].uz;
     for (const side of [-1, 1]) {
@@ -258,10 +276,41 @@ export class Bridges {
           pts.push(new Vector3(a.x + (b.x - a.x) * u - uz * off * side, ya + (yb - ya) * u - sag, a.z + (b.z - a.z) * u + ux * off * side));
         }
       }
+      lights.cables.push(pts);
       const tube = new Mesh(new TubeGeometry(new CatmullRomCurve3(pts), 120, def.cables === "chain" ? 0.7 : 0.5, 5), mat);
       tube.castShadow = true;
       this.group.add(tube);
     }
+  }
+
+  /** Lamp positions along both edges of the deck's level span, 5 m above the deck. */
+  private deckLamps(def: BridgeJson): Vector3[] {
+    const out: Vector3[] = [];
+    const STEP = 22;
+    for (const side of [-1, 1]) {
+      let next = STEP / 2;
+      let run = 0;
+      for (let i = 0; i < def.axis.length / 2 - 1; i++) {
+        const ax = def.axis[i * 2];
+        const az = def.axis[i * 2 + 1];
+        const ex = def.axis[i * 2 + 2] - ax;
+        const ez = def.axis[i * 2 + 3] - az;
+        const l = Math.hypot(ex, ez);
+        if (l < 0.01) continue;
+        const nx = -ez / l;
+        const nz = ex / l;
+        while (next <= run + l) {
+          const t = (next - run) / l;
+          const x = ax + ex * t + nx * side * (def.width / 2 - 0.6);
+          const z = az + ez * t + nz * side * (def.width / 2 - 0.6);
+          const top = this.topAt(def, x, z);
+          if (top > def.top - 0.5) out.push(new Vector3(x, top + 5, z));
+          next += STEP;
+        }
+        run += l;
+      }
+    }
+    return out;
   }
 
   /** The deck over (x, z), its outline grown by `margin`, if any. */
