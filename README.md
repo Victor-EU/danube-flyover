@@ -132,6 +132,14 @@ The music isn't part of `build-world`. To change it, download the originals into
   - `tools/lib/ktx2.ts` encodes the full-size textures (Basis Universal: ETC1S for the layers, UASTC for the skies, through `ktx2-encoder`'s WebAssembly build).
   - `tools/capturePlugin.ts` is the dev server's frame capture endpoint.
 
+## License
+
+The source code is under the MIT License (`LICENSE`), and so are the project's textures and card illustrations: procedural, or AI-generated with OpenAI's image API from the procedural layouts and renders of the scene. The data and the music keep their own licences, credited below:
+
+- the OpenStreetMap extracts in `tools/osm/`, and everything built from them in `public/data/` (the city, river, bridges, trees, tram lines and landmark models), are ODbL 1.0;
+- the terrain is modified Copernicus DEM GLO-30 data;
+- the music is CC BY 4.0.
+
 ## Credits
 
 - Map data © OpenStreetMap contributors, ODbL 1.0. The extracts in `tools/osm/` and the files derived from them in `public/data/` are ODbL databases (see `tools/osm/README.md`).
