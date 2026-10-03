@@ -2,6 +2,55 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-03 — The far buildings, built as the world's are
+
+The far field read as a different city. Beyond the world's tiled and slated roofs stood pale, flat-roofed boxes with drawn-on windows, so the edge showed from every high view. Now the far buildings go through the world's own pipeline and wear its surfaces; at the edge the two are hard to tell apart.
+
+**One set of rules** (`tools/lib/cityStyle.ts`)
+
+- build-city's heights, roof kinds, palettes, facade choice, roof coverings and pitches, and its canyon probe moved into a module both builds share. The world's output is byte-identical after the move.
+- In the inner districts (the twelve polygons in `tools/osm/districts.geojson`, 73,241 of the far buildings), the rules are exactly the world's.
+- In the outer districts:
+  - the untagged are more often houses, sheds and halls than blocks of flats;
+  - the estates' blocks of flats (14 m and up) and the industrial sheds are flat-roofed, with panel or modern facades;
+  - Buda and Pest are split by the river's line.
+
+**The build** (`tools/build-far.ts`, 5–7 minutes)
+
+- **Roofs:** the 120,724 buildings merge into 100,421 blocks, which are roofed from their straight skeletons, as the world's are.
+  - 296 blocks got no skeleton; two outlines ran CGAL's WebAssembly heap past its 2 GB and fell back to a skeleton per building.
+  - That gives 101,964 pitched roofs, 1,788 mansards, 384 steep roofs and 16,588 flat ones.
+- **Firewalls:** wherever a building stands over its neighbour, a firewall runs from the neighbour's roof up to its own, gables included (19,787 buildings).
+- **Canyons:** the street walls carry the canyons' baked occlusion, probed at 1.2 m steps.
+- **The file, `far/buildings.bin`** (format DFB3):
+  - Each building holds its rings, with a party-wall flag and canyon bytes per wall, and an upper mesh of roof and firewall triangles.
+  - Coordinates are varints, delta-coded.
+  - Roof corners at the eaves refer to the ring's points instead of repeating them.
+  - It grew from 3.3 MB to 13.6 MB. The initial download is now 91.5 MB, so the budget rose to 100 MB; the far field streams in after the first frame.
+
+**The runtime**
+
+- **Shader:** the world's building shader, split so the far field shares its fragment code (`patchFarBuildings`). Facade tiles go storey by storey, roof tiles are weathered, firewalls are plaster, and windows come on one by one at dusk.
+  - The walls take their coordinates from the perimeter and the building's base.
+  - Roofs and firewalls work theirs out from the face's own normal (along the eaves, and up the slope).
+- **Geometry:** flat-shaded, with 19-byte vertices: 16-bit positions per tile, colour bytes, layer, seed and heights. It comes in chunks of up to 65,536 vertices, 106 MB of geometry in all.
+- **Cost on the M3:** 0–1.7 ms in the flyover's own views, and 1.1–2.3 ms in a high overview of Pest.
+- **By day:** the window lighting is skipped while the sun is above +6.5°, when none can be lit (in the world's buildings too).
+- **Colours:** stored linear, as glTF's are; raw sRGB bytes had made the far field pale.
+
+**A regression found on the way.** The realism pass (46ab8a7) changed the quads' index order, which wound the world's walls, gables, parapets, fascias and cornice tops inward:
+
+- The near walls were culled, so you looked through them at the inside of the far walls.
+- Those walls were lit as if they faced the other way, so sunlit walls came out dark and shaded ones bright.
+
+Each quad now winds itself to face along its declared normal, and the far meshes do the same.
+
+**What stays simple:**
+
+- The far buildings have no chimneys, cornices or parapets as geometry; the shader's cornice band stands in for them.
+- They take no shadows. Neither do the world's own blocks beyond the 600 m shadow box.
+- A block cut by the world's edge is roofed separately on each side, so its roof dips at the edge.
+
 ## 2026-10-03 — The far field
 
 The world ended a few hundred metres back from the banks, in a flat beige plain: high views showed the edge, and the Buda hills weren't there. With the user's go-ahead, two more downloads fill it with the real city.

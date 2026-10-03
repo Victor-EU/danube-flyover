@@ -180,7 +180,7 @@ async function main(): Promise<void> {
   let far: Far | null = null;
   let farLoad: Promise<void> | null = params.get("far") === "off" ? Promise.resolve() : null;
   const loadFar = () =>
-    Far.load(renderer, world.bounds, world.water, async (file) => {
+    Far.load(renderer, world.bounds, world.water, models.textures, async (file) => {
       const res = await fetch(`data/${file}`);
       if (!res.ok) throw new Error(`Couldn't load data/${file} (${res.status}).`);
       return res.arrayBuffer();

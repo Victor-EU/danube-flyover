@@ -5,9 +5,10 @@
 //     falls with their distance from the world (40 m near it, 160 m and 320 m far off), with
 //     skirts so neighbouring levels never show a crack; coloured from the painted ground
 //     textures (alpha is the street light, lit at night).
-//   - Buildings: extruded in a worker (farWorker.ts) per 1 km tile, flat-shaded, roofs told
-//     from walls by their slope; windows drawn in the shader, dark by day and lit at random
-//     after dusk; a tile is drawn within QUALITY.far metres.
+//   - Buildings: built in a worker (farWorker.ts) per 1 km tile, as build-far laid them out by
+//     the world's own rules (roofs from the block skeletons, firewalls, the canyons' occlusion),
+//     in the world's own surfaces (surfaces.ts: the facade and roof tiles, windows lit one by
+//     one at dusk), flat-shaded; a tile is drawn within QUALITY.far metres.
 //   - Water (the river's material), bridges, towers; the bridges' lamps and the aviation
 //     lights as points, the beacons blinking.
 // All of it on LAYER.far, which the planar reflection leaves out, and none of it in shadow.
@@ -37,12 +38,13 @@ import {
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { QUALITY } from "../config";
+import type { TextureSet } from "../textures";
 import type { Bounds } from "./bounds";
-import { FAR_ROOFS, FAR_WALLS } from "./farFormat";
-import type { FarTileMessage } from "./farWorker";
+import type { FarChunkMessage } from "./farWorker";
 import { decodeGrid, type Grid } from "./gridFile";
 import { SHARED } from "./night";
 import { HASH_GLSL, patchMaterial } from "./shaderPatch";
+import { patchFarBuildings } from "./surfaces";
 import { LAYER } from "./water";
 
 const FILES = ["far/terrain.bin", "far/wide.bin", "far/ground.webp", "far/wide.webp", "far/buildings.bin", "far/structures.glb"] as const;
@@ -196,50 +198,10 @@ function terrainMaterial(ground: Texture, wide: Texture, box: Rect, wideRect: Re
   return mat;
 }
 
-/** The far buildings' material: palette colours, windows by storey and bay, lit at random at night. */
-function buildingMaterial(): MeshStandardMaterial {
-  const mat = new MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: true, name: "far buildings" });
-  const walls = FAR_WALLS.map((c) => new Color(c));
-  const roofs = FAR_ROOFS.map((c) => new Color(c));
-  patchMaterial(mat, {
-    key: "far-buildings",
-    uniforms: { uWalls: { value: walls }, uRoofs: { value: roofs }, uNight: SHARED.uNight, uWarm: { value: new Color("#ffc98a") } },
-    vertexPars: "attribute vec4 aInfo;\nattribute float aBase;\nflat varying vec4 vInfo;\nflat varying float vBase;\nvarying vec3 vFarPos;",
-    vertex: [["begin_vertex", "vInfo = aInfo;\nvBase = aBase;\nvFarPos = (modelMatrix * vec4(transformed, 1.0)).xyz;"]],
-    fragmentPars: `uniform vec3 uWalls[${walls.length}];\nuniform vec3 uRoofs[${roofs.length}];\nuniform float uNight;\nuniform vec3 uWarm;\nflat varying vec4 vInfo;\nflat varying float vBase;\nvarying vec3 vFarPos;\nvec3 farLit = vec3(0.0);\n${HASH_GLSL}`,
-    fragment: [
-      [
-        "normal_fragment_maps",
-        /* glsl */ `
-        {
-          vec3 wn = inverseTransformDirection(normal, viewMatrix);
-          if (wn.y > 0.5) {
-            diffuseColor.rgb = uRoofs[int(vInfo.y)] * (0.9 + 0.2 * hash12(vec2(vInfo.z, vInfo.x)));
-          } else {
-            // Darker toward the street, as the world's canyons are.
-            vec3 wall = uWalls[int(vInfo.x)] * mix(0.55, 0.92, smoothstep(0.0, 14.0, vFarPos.y - vBase));
-            // Storeys of 3.3 m from the base, bays of 3.4 m along the wall.
-            vec2 t = normalize(vec2(-wn.z, wn.x) + 1e-5);
-            float storey = (vFarPos.y - vBase) / 3.3;
-            float bay = dot(vFarPos.xz, t) / 3.4;
-            vec2 cell = vec2(fract(bay), fract(storey));
-            float win = step(0.24, cell.x) * step(cell.x, 0.76) * step(0.3, cell.y) * step(cell.y, 0.74) * step(1.0, storey);
-            // Fade the pattern to its average where a window is smaller than a pixel.
-            float px = max(fwidth(storey), fwidth(bay));
-            float sharp = clamp(1.6 - px * 2.2, 0.0, 1.0);
-            float glass = mix(0.14 * step(1.0, storey), win, sharp);
-            diffuseColor.rgb = mix(wall, wall * 0.32 + vec3(0.02, 0.025, 0.03), glass * 0.85);
-            // At night a third of the windows are lit, warmer and dimmer at random; shopfronts below.
-            float on = step(hash12(floor(vec2(bay, storey)) + vInfo.z * 3.17), 0.32) * (0.5 + 0.5 * hash12(floor(vec2(bay, storey)) * 1.7 + 4.1));
-            float lit = mix(0.32 * 0.75 * step(1.0, storey), win * on, sharp);
-            float shop = (1.0 - step(1.0, storey)) * step(0.15, cell.y) * step(cell.y, 0.85) * 0.6;
-            farLit = uWarm * (lit * 0.9 + shop) * uNight;
-          }
-        }`,
-      ],
-      ["emissivemap_fragment", "totalEmissiveRadiance += farLit;"],
-    ],
-  });
+/** The far buildings' material: the world's building surfaces, flat-shaded. */
+function buildingMaterial(textures: TextureSet): MeshStandardMaterial {
+  const mat = new MeshStandardMaterial({ roughness: 0.9, metalness: 0, flatShading: true, vertexColors: true, name: "far buildings" });
+  patchFarBuildings(mat, textures);
   return mat;
 }
 
@@ -293,7 +255,7 @@ export class Far {
   }
 
   /** Loads and builds the far field; `water` is the river's material, for the water beyond the world. */
-  static async load(renderer: WebGLRenderer, world: Bounds, water: Material, get: (file: string) => Promise<ArrayBuffer>): Promise<Far> {
+  static async load(renderer: WebGLRenderer, world: Bounds, water: Material, textures: TextureSet, get: (file: string) => Promise<ArrayBuffer>): Promise<Far> {
     const far = new Far();
     const [terrainBytes, wideBytes, groundBytes, wideTexBytes, buildingBytes, structureBytes] = await Promise.all(FILES.map((f) => get(f)));
     const texture = async (bytes: ArrayBuffer) => {
@@ -342,11 +304,11 @@ export class Far {
     for (const p of far.lights) far.group.add(p);
 
     // Buildings, from the worker, a tile at a time.
-    const bmat = buildingMaterial();
+    const bmat = buildingMaterial(textures);
     await new Promise<void>((resolve, reject) => {
       const worker = new Worker(new URL("./farWorker.ts", import.meta.url), { type: "module" });
       worker.onerror = (e) => reject(new Error(`far buildings: ${e.message}`));
-      worker.onmessage = (e: MessageEvent<FarTileMessage | { done: true }>) => {
+      worker.onmessage = (e: MessageEvent<FarChunkMessage | { done: true }>) => {
         if ("done" in e.data) {
           worker.terminate();
           resolve();
@@ -355,17 +317,21 @@ export class Far {
         const t = e.data;
         const geo = new BufferGeometry();
         geo.setAttribute("position", new BufferAttribute(t.position, 3));
-        geo.setAttribute("aInfo", new BufferAttribute(t.info, 4));
-        geo.setAttribute("aBase", new BufferAttribute(t.base, 1));
+        geo.setAttribute("color", new BufferAttribute(t.color, 3, true));
+        geo.setAttribute("aAlong", new BufferAttribute(t.along, 1));
+        geo.setAttribute("aCanyon", new BufferAttribute(t.canyon, 2, true));
+        geo.setAttribute("aInfo", new BufferAttribute(t.info, 2));
+        geo.setAttribute("aLevel", new BufferAttribute(t.level, 2));
         geo.setIndex(new BufferAttribute(t.index, 1));
         geo.computeBoundingSphere();
         const mesh = new Mesh(geo, bmat);
         mesh.position.set(t.x, 0, t.z);
+        mesh.scale.setScalar(t.scale);
         mesh.updateMatrix();
         mesh.matrixAutoUpdate = false;
         mesh.name = "far buildings";
         const s = geo.boundingSphere!;
-        far.tiles.push({ mesh, x: t.x + s.center.x, z: t.z + s.center.z, r: s.radius });
+        far.tiles.push({ mesh, x: t.x + s.center.x * t.scale, z: t.z + s.center.z * t.scale, r: s.radius * t.scale });
         far.buildings += t.buildings;
         far.group.add(mesh);
       };

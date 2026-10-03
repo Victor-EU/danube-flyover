@@ -22,13 +22,15 @@ import sharp from "sharp";
 import { FAR } from "../src/config";
 import { localToLonLat, lonLatToLocal } from "../src/geo";
 import { worldBounds } from "../src/world/bounds";
-import { FAR_ROOF_GROUPS, FAR_ROOFS, FAR_TILE, FAR_WALL_GROUPS, encodeFarBuildings, type FarBuilding } from "../src/world/farFormat";
+import { FAR_TILE, encodeFarBuildings, type FarBuilding } from "../src/world/farFormat";
 import { decodeGrid, encodeGrid } from "../src/world/gridFile";
 import { Terrain } from "../src/world/terrain";
-import { centroid, mulberry32, projectPolygons, signedArea, type Polygon, type Pt, type Ring } from "./lib/geom";
+import { BUDA, CHURCH, districtLookup, F, facadeOf, HOUSE, loadDistricts, MODERN, OPEN, canyonProbe, pick, profileFor, ROOF_LAYER, roofCovering, ROOFS, shapeOf, SMALL, WALLS, type RoofKind, type Shape } from "./lib/cityStyle";
+import { centroid, hash01, mulberry32, pointInPolygon, polygonArea, projectPolygons, ringBox, signedArea, simplifyRing, type Polygon, type Pt, type Ring } from "./lib/geom";
 import { writeGlb, type MeshDef } from "./lib/gltf";
 import { COPERNICUS, DATA_DIR, kb, ODBL, OSM_DIR, readDataBytes, writeDataBytes, type OsmFeature } from "./lib/io";
 import { debugDir, writePng } from "./lib/png";
+import { blockPieces, buildBlocks, clipPieces, initSkeleton, pieceHeight, roofHeightAt, type Piece } from "./lib/roofs";
 import { inpaint, Raster } from "./lib/raster";
 
 const t0 = performance.now();
@@ -452,8 +454,8 @@ lap(`painted ${ordered.length} streets and rails`);
 // Roofs: tile on houses, slate and tin on the older blocks, flat grey on the big and the new.
 const roofRgb = (area: number, tall: boolean, u: number): RGB => {
   const group = tall || area > 4000 ? (u < 0.7 ? "flat" : "slate") : area > 300 ? (u < 0.6 ? "tile" : u < 0.9 ? "slate" : "flat") : u < 0.8 ? "tile" : "slate";
-  const [g0, g1] = FAR_ROOF_GROUPS[group];
-  return hex(FAR_ROOFS[g0 + Math.floor(((u * 7.31) % 1) * (g1 - g0))]);
+  const c = pick(ROOFS[group], (u * 7.31) % 1);
+  return [Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)];
 };
 {
   const rand = mulberry32(11);
@@ -552,164 +554,306 @@ lap("wide.webp");
 
 // --- 4. Buildings -----------------------------------------------------------------------------------
 
-const LEVEL = 3.3;
-const SMALL = new Set(["garage", "garages", "shed", "hut", "kiosk", "carport", "service", "toilets", "cabin", "transformer_tower", "bunker", "roof"]);
-const HOUSE = new Set(["house", "detached", "semidetached_house", "bungalow", "villa", "terrace", "farm", "residential"]);
-const CHURCH = new Set(["church", "cathedral", "chapel"]);
-const MODERN = new Set(["office", "commercial", "retail", "hospital", "university", "parking", "train_station", "transportation", "college", "school", "hotel", "apartments"]);
+// The world's own rules (tools/lib/cityStyle.ts), so a street looks the same on both sides of
+// its edge: in the inner districts exactly as build-city has them, in the outer ones with the
+// untagged more often houses, sheds and halls than blocks, and the estates' blocks of flats
+// flat-roofed. Touching buildings merge into blocks whose straight skeletons roof them
+// (tools/lib/roofs.ts); a firewall rises wherever a building stands over its neighbour; the
+// street walls carry the canyons' baked occlusion. Near the world everything, further out only
+// what stands out of the roofscape (the rest is in the ground's texture).
+
+const districtOf = districtLookup(loadDistricts());
 const INDUSTRIAL = new Set(["industrial", "warehouse", "manufacture", "hangar", "factory", "greenhouse"]);
-const num = (s: string | undefined) => (s === undefined ? NaN : Number.parseFloat(s));
-
-/** Eaves height (m) and roof of a far building. */
-function farShape(p: Record<string, string | undefined>, area: number, u: number): { eave: number; pitched: boolean } {
-  const t = p.building ?? "yes";
-  const h = num(p.height);
-  const lv = num(p["building:levels"]);
-  const shape = p["roof:shape"];
-  let eave: number;
-  if (Number.isFinite(h) && h > 0) eave = shape && shape !== "flat" ? h - Math.min(4, h * 0.3) : h;
-  else if (Number.isFinite(lv) && lv > 0) eave = lv * LEVEL + 1;
-  else if (SMALL.has(t)) eave = 2.8;
-  else if (HOUSE.has(t) || (t === "yes" && area < 220)) eave = area < 90 ? 3.5 + u : 5.5 + 2.5 * u;
-  else if (CHURCH.has(t)) eave = 14;
-  else if (INDUSTRIAL.has(t)) eave = 7 + 4 * u;
-  else if (t === "apartments") eave = 12 + 9 * u;
-  else eave = area > 3000 ? 9 + 6 * u : 12 + 8 * u;
-  const pitched = shape ? shape !== "flat" : !INDUSTRIAL.has(t) && !MODERN.has(t) && area < 700 && eave < 14;
-  return { eave: clamp(eave, 2.4, 330), pitched };
-}
-
-/** The ring counter-clockwise (x, z), cleaned of repeats and nearly straight corners, with each wall's hidden flag kept. */
-function cleanRing(ring: Ring, hidden: boolean[]): { ring: Ring; hidden: boolean[] } {
-  let r = ring.slice();
-  let h = hidden.slice();
-  if (signedArea(r) < 0) {
-    // Reversed: wall i (from i to i + 1) becomes the wall from the new i to i + 1.
-    const n = r.length;
-    r = r.slice().reverse();
-    h = Array.from({ length: n }, (_, i) => hidden[(n - 2 - i + n) % n]);
-  }
-  for (let changed = true; changed && r.length > 3; ) {
-    changed = false;
-    for (let i = 0; i < r.length && r.length > 3; i++) {
-      const n = r.length;
-      const a = r[(i - 1 + n) % n];
-      const p = r[i];
-      const c = r[(i + 1) % n];
-      const ac = Math.hypot(c[0] - a[0], c[1] - a[1]);
-      const off = ac > 1e-6 ? Math.abs((c[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (c[1] - a[1])) / ac : 0;
-      if (Math.hypot(p[0] - a[0], p[1] - a[1]) < 0.4 || off < 0.35) {
-        // Drop p: the wall from a now runs to c, a party wall only if both parts were.
-        const ia = (i - 1 + n) % n;
-        h[ia] = h[ia] && h[i];
-        r.splice(i, 1);
-        h.splice(i, 1);
-        changed = true;
-        i--;
-      }
-    }
-  }
-  return { ring: r, hidden: h };
-}
-
-// Party walls: edges two footprints share (OSM's neighbours share their nodes).
-const edgeKey = (a: Pt, c: Pt) => {
-  const ka = `${Math.round(a[0] * 20)},${Math.round(a[1] * 20)}`;
-  const kc = `${Math.round(c[0] * 20)},${Math.round(c[1] * 20)}`;
-  return ka < kc ? `${ka}|${kc}` : `${kc}|${ka}`;
+/** Buda west of the river, Pest east: the river's line through the box (Margaret Island to Csepel), roughly. */
+const riverX = (z: number) => {
+  const t = clamp((z - box.z0) / (box.z1 - box.z0), 0, 1);
+  return 1200 * (1 - t) + 300 * t;
 };
-interface Raw {
-  ring: Ring;
-  eave: number;
-  pitched: boolean;
+const FLATS = new Set(["apartments", "residential", "yes"]);
+/** The polygon's i-th point, counting through its rings in order. */
+const flatRing = (poly: Polygon, i: number): Pt => {
+  for (const r of poly) {
+    if (i < r.length) return r[i];
+    i -= r.length;
+  }
+  throw new Error("flatRing: out of range");
+};
+const linear = (c: RGB): RGB => c.map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)) as RGB;
+
+/** The outer districts' shapes: the world's, with their own defaults for the untagged. */
+function suburbShape(p: Record<string, string | undefined>, area: number, u: number): Shape {
+  const s = shapeOf(p, area, u);
+  const t = p.building ?? "yes";
+  const tagged = !!p["roof:shape"];
+  if (s.source === "default") {
+    if (SMALL.has(t)) s.eave = 2.8;
+    else if (HOUSE.has(t) || t === "farm" || ((t === "yes" || t === "residential") && area < 220)) s.eave = area < 90 ? 3.5 + u : 5.5 + 2.5 * u;
+    else if (INDUSTRIAL.has(t)) s.eave = 7 + 4 * u;
+    else if (t === "apartments" || t === "residential") s.eave = 12 + 9 * u;
+    else if (!CHURCH.has(t)) s.eave = area > 3000 ? 9 + 6 * u : 12 + 8 * u;
+  }
+  if (!tagged && (INDUSTRIAL.has(t) || (s.eave >= 14 && FLATS.has(t)))) s.kind = "flat";
+  return s;
+}
+function suburbFacade(t: string, eave: number, buda: boolean, u: number): number {
+  if (MODERN.has(t) || INDUSTRIAL.has(t) || eave > 32) return F.modern;
+  if (SMALL.has(t) || HOUSE.has(t) || eave < 9) return F.villa;
+  if (eave >= 14 && FLATS.has(t)) return u < 0.75 ? F.panel : F.modern;
+  if (buda) return eave < 14 ? F.budaBaroque : F.pestClassic;
+  return u < 0.5 ? F.pestClassic : F.pestEclectic;
+}
+
+interface FarBd {
+  poly: Polygon;
   area: number;
   cx: number;
   cz: number;
-  wall: number;
-  roof: number;
+  base: number;
+  eave: number;
+  kind: RoofKind;
+  roofLevels: number;
+  wall: RGB;
+  roof: RGB;
+  facade: number;
+  roofLayer: number;
+  seed: number;
   d: number;
 }
-const raws: Raw[] = [];
-{
-  const rand = mulberry32(7);
-  const riverX = (z: number) => {
-    // Buda west of the river, Pest east: the river's line through the box (Margaret Island to Csepel), roughly.
-    const t = clamp((z - box.z0) / (box.z1 - box.z0), 0, 1);
-    return 1200 * (1 - t) + 300 * t;
-  };
-  for (const { f, poly } of buildingPolys) {
-    const ring = poly[0];
-    const area = Math.abs(signedArea(ring));
-    if (area < 20) continue;
-    const [cx, cz] = centroid(ring);
-    if (inWorld(cx, cz, 2) || !inBox(cx, cz)) continue;
-    const u = rand();
-    const { eave, pitched } = farShape(f.properties, area, u);
-    const t = f.properties.building ?? "yes";
-    const modern = MODERN.has(t) || eave > 26 || area > 4000;
-    const wg0 = INDUSTRIAL.has(t) ? FAR_WALL_GROUPS.industrial : modern ? FAR_WALL_GROUPS.modern : cx < riverX(cz) ? FAR_WALL_GROUPS.buda : FAR_WALL_GROUPS.pest;
-    const wall = wg0[0] + Math.floor(rand() * (wg0[1] - wg0[0]));
-    // Pest's and Buda's old blocks are tiled or slated even where the far field draws them flat; the new and the big are flat.
-    const roofGroup = CHURCH.has(t) && rand() < 0.4 ? "copper" : modern || INDUSTRIAL.has(t) ? (rand() < 0.75 ? "flat" : "slate") : rand() < 0.66 ? "tile" : "slate";
-    const rg = FAR_ROOF_GROUPS[roofGroup];
-    const roof = rg[0] + Math.floor(rand() * (rg[1] - rg[0]));
-    raws.push({ ring, eave, pitched, area, cx, cz, wall, roof, d: toWorld(cx, cz) });
+const raws: FarBd[] = [];
+const sources = { height: 0, levels: 0, default: 0 };
+let inner = 0;
+for (const { f, poly: poly0 } of buildingPolys) {
+  const p = f.properties;
+  if (p.building === "roof" || (p.building === "construction" && !p["building:levels"])) continue;
+  const poly: Polygon = poly0.map((r) => simplifyRing(r, 0.3)).filter((r) => r.length >= 3);
+  if (!poly.length || poly[0].length < 3) continue;
+  const area = polygonArea(poly);
+  if (area < 20) continue;
+  const [cx, cz] = centroid(poly[0]);
+  if (inWorld(cx, cz, 2) || !inBox(cx, cz)) continue;
+  if (signedArea(poly[0]) < 0) poly[0].reverse();
+  for (let i = 1; i < poly.length; i++) if (signedArea(poly[i]) > 0) poly[i].reverse();
+  let gMin = Infinity;
+  let gSum = 0;
+  for (const [x, z] of poly[0]) {
+    const h = ground.sample(x, z);
+    gMin = Math.min(gMin, h);
+    gSum += h;
   }
-}
-// Near the world everything; further out only what stands out of the roofscape (the rest is in the ground's texture).
-const NEAR = 6000;
-const kept = raws.filter((r) => r.d < NEAR || r.eave >= 22 || r.area >= 2500);
-const edges = new Map<string, { b: number; h: number }[]>();
-kept.forEach((r, bi) => {
-  for (let i = 0; i < r.ring.length; i++) {
-    const key = edgeKey(r.ring[i], r.ring[(i + 1) % r.ring.length]);
-    let list = edges.get(key);
-    if (!list) edges.set(key, (list = []));
-    list.push({ b: bi, h: r.eave });
-  }
-});
-const tilesMap = new Map<string, { x: number; z: number; buildings: FarBuilding[] }>();
-let hiddenWalls = 0;
-let walls = 0;
-let hipped = 0;
-for (let bi = 0; bi < kept.length; bi++) {
-  const r = kept[bi];
-  const hidden = r.ring.map((p, i) => {
-    const list = edges.get(edgeKey(p, r.ring[(i + 1) % r.ring.length]))!;
-    // Hidden when a neighbour shares it and stands at least as tall (less 3 m).
-    return list.some((o) => o.b !== bi && o.h >= r.eave - 3);
+  const gAvg = Math.max(gSum / poly[0].length, 0.5);
+  const id = `${p.id}`;
+  const district = districtOf(cx, cz);
+  const t = p.building ?? "yes";
+  const known = district !== "other";
+  const buda = known ? BUDA.has(district) : cx < riverX(cz);
+  const shape = known ? shapeOf(p, area, hash01(`${id}:height`)) : suburbShape(p, area, hash01(`${id}:height`));
+  const castle = district === "I. kerület" && gAvg > 45;
+  const facade = known ? facadeOf(t, district, shape.eave, castle, hash01(`${id}:facade`)) : suburbFacade(t, shape.eave, buda, hash01(`${id}:facade`));
+  const modern = MODERN.has(t) || INDUSTRIAL.has(t) || facade === F.modern || facade === F.panel;
+  const walls = modern ? WALLS.modern : castle ? WALLS.castle : buda ? WALLS.buda : WALLS.pest;
+  const covering = roofCovering(shape.kind, buda, hash01(`${id}:roof`));
+  raws.push({
+    poly,
+    area,
+    cx,
+    cz,
+    base: gMin - 1,
+    eave: gAvg + shape.eave,
+    kind: shape.kind,
+    roofLevels: shape.roofLevels,
+    wall: pick(walls, hash01(`${id}:colour`)),
+    roof: pick(ROOFS[covering], hash01(`${id}:roofshade`)),
+    facade,
+    roofLayer: ROOF_LAYER[covering],
+    seed: hash01(id),
+    d: toWorld(cx, cz),
   });
-  const clean = cleanRing(r.ring, hidden);
-  if (clean.ring.length < 3 || clean.ring.length > 250) continue;
-  // The base: the lowest ground under the walls, a little below it.
-  let base = Infinity;
-  for (const [x, z] of clean.ring) base = Math.min(base, ground.sample(x, z));
-  base = Math.min(base, ground.sample(r.cx, r.cz)) - 1;
-  // A hipped roof on small, nearly rectangular houses.
-  let rise = 0;
-  if (r.pitched && clean.ring.length === 4 && r.area < 450) {
-    const [p0, p1, p2] = clean.ring;
-    const e1 = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-    const e2 = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
-    const cos = ((p1[0] - p0[0]) * (p2[0] - p1[0]) + (p1[1] - p0[1]) * (p2[1] - p1[1])) / (e1 * e2);
-    if (Math.abs(cos) < 0.2) {
-      rise = clamp(Math.min(e1, e2) * 0.42, 1.5, 7);
-      hipped++;
+  sources[shape.source]++;
+  if (known) inner++;
+}
+const NEAR = 6000;
+const kept = raws.filter((r) => r.d < NEAR || r.eave - r.base >= 23 || r.area >= 2500);
+lap(`${kept.length} far buildings kept of ${raws.length} outside the world (${inner} in the inner districts; heights tagged ${sources.height}, levels ${sources.levels}, default ${sources.default})`);
+
+await initSkeleton();
+const { blocks, blockOf, failed } = await buildBlocks(kept.map((r) => r.poly));
+lap(`${blocks.length} blocks (${failed} without a skeleton)`);
+const profiles = kept.map((bd, i) => (blockOf[i] >= 0 ? profileFor(bd.kind, bd.eave - bd.base, bd.roofLevels, `far${blockOf[i]}`) : null));
+const piecesOf = (i: number) => (profiles[i] ? blockPieces(blocks[blockOf[i]], profiles[i]!) : null);
+/** The roof's height above its eaves at (x, z): the block's pieces (0 off them, or for a flat roof). */
+const roofAt = (pieces: Piece[] | null, x: number, z: number) => (pieces ? Math.max(0, roofHeightAt(pieces, x, z)) : 0);
+
+// Which building stands at a point, for the neighbour across a party wall.
+const GRID = 20;
+const byCell = new Map<number, number[]>();
+kept.forEach((bd, i) => {
+  const bx = ringBox(bd.poly[0]);
+  for (let gx = Math.floor(bx.minX / GRID); gx <= Math.floor(bx.maxX / GRID); gx++)
+    for (let gz = Math.floor(bx.minZ / GRID); gz <= Math.floor(bx.maxZ / GRID); gz++) {
+      const key = gx * 100003 + gz;
+      const list = byCell.get(key);
+      if (list) list.push(i);
+      else byCell.set(key, [i]);
     }
+});
+const standing = (x: number, z: number, self: number) => {
+  for (const i of byCell.get(Math.floor(x / GRID) * 100003 + Math.floor(z / GRID)) ?? []) if (i !== self && pointInPolygon(kept[i].poly, x, z)) return i;
+  return -1;
+};
+const facing = canyonProbe(kept, 1.2);
+
+const tilesMap = new Map<string, { x: number; z: number; buildings: FarBuilding[] }>();
+const stats = { pitched: 0, mansard: 0, steep: 0, flat: 0, streetWalls: 0, partyWalls: 0, firewalls: 0, upper: 0, triangles: 0 };
+const tRoofs = performance.now();
+kept.forEach((bd, bi) => {
+  if (bi % 10000 === 0 && process.env.PROGRESS) console.log(`  ${bi} buildings, ${((performance.now() - tRoofs) / 1000).toFixed(1)} s`);
+  const block = blockOf[bi] >= 0 ? blocks[blockOf[bi]] : null;
+  const pieces = piecesOf(bi);
+  stats[pieces ? bd.kind : "flat"]++;
+  const { base, eave } = bd;
+  const upper: FarBuilding["upper"] = [];
+  const triangles: number[] = [];
+  const weld = new Map<string, number>();
+  const vert = (x: number, z: number, h: number, firewall: boolean) => {
+    const key = `${Math.round(x * 100)},${Math.round(z * 100)},${Math.round(h * 100)},${firewall ? 1 : 0}`;
+    let i = weld.get(key);
+    if (i === undefined) {
+      i = upper.length;
+      upper.push({ x, z, h, firewall });
+      weld.set(key, i);
+    }
+    return i;
+  };
+  const tri = (a: number, b: number, c: number) => {
+    if (a !== b && b !== c && a !== c) triangles.push(a, b, c);
+  };
+  /** A polygon in x-z, triangulated and lifted by `h`, facing up. */
+  const flat = (poly: Polygon, h: (x: number, z: number) => number) => {
+    const xy: number[] = [];
+    const holes: number[] = [];
+    poly.forEach((r, k) => {
+      if (k > 0) holes.push(xy.length / 2);
+      for (const q of r) xy.push(q[0], q[1]);
+    });
+    const ids: number[] = [];
+    for (let i = 0; i < xy.length; i += 2) ids.push(vert(xy[i], xy[i + 1], h(xy[i], xy[i + 1]), false));
+    const tris = earcut(xy, holes, 2);
+    for (let t = 0; t < tris.length; t += 3) {
+      const [a, b2, d] = [tris[t], tris[t + 1], tris[t + 2]];
+      const cross = (xy[b2 * 2] - xy[a * 2]) * (xy[d * 2 + 1] - xy[a * 2 + 1]) - (xy[b2 * 2 + 1] - xy[a * 2 + 1]) * (xy[d * 2] - xy[a * 2]);
+      if (cross < 0) tri(ids[a], ids[b2], ids[d]);
+      else tri(ids[a], ids[d], ids[b2]);
+    }
+  };
+  if (pieces) {
+    for (const { poly, piece } of clipPieces(pieces, bd.poly)) flat(poly, (x, z) => Math.max(0, pieceHeight(piece, x, z)));
+  } else flat(bd.poly, () => 0.02);
+
+  const party: boolean[][] = [];
+  const canyon: [number, number, number, number][][] = [];
+  for (const ring of bd.poly) {
+    const n = ring.length;
+    const rp: boolean[] = [];
+    const rc: [number, number, number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      const a = ring[i];
+      const c = ring[(i + 1) % n];
+      const ex = c[0] - a[0];
+      const ez = c[1] - a[1];
+      const l = Math.hypot(ex, ez);
+      const nx = l > 0 ? ez / l : 0;
+      const nz = l > 0 ? -ex / l : 0;
+      const mx = (a[0] + c[0]) / 2;
+      const mz = (a[1] + c[1]) / 2;
+      const isParty = l > 0.05 && !!block && pointInPolygon(block.outline, mx + nx * 0.35, mz + nz * 0.35);
+      rp.push(isParty || l <= 0.05);
+      if (!isParty) {
+        if (l > 0.05) stats.streetWalls++;
+        // The wall's ends look across at whatever faces them.
+        const inset = Math.min(1, l / 3);
+        const [d0, h0] = l > 0.05 ? facing(a[0] + (ex / l) * inset, a[1] + (ez / l) * inset, nx, nz, bi, base) : OPEN;
+        const [d1, h1] = l > 0.05 ? facing(c[0] - (ex / l) * inset, c[1] - (ez / l) * inset, nx, nz, bi, base) : OPEN;
+        rc.push([d0, h0, d1, h1]);
+        continue;
+      }
+      rc.push([OPEN[0], 0, OPEN[0], 0]);
+      stats.partyWalls++;
+      // A party wall shows where this building stands over its neighbour: from the neighbour's
+      // roof (or the ground, with none there) up to this one's, gables and all.
+      const o = standing(mx + nx * 0.35, mz + nz * 0.35, bi);
+      const oPieces = o >= 0 ? piecesOf(o) : null;
+      const steps = Math.max(1, Math.ceil(l / 1.5));
+      const samples: [number, number, number, number][] = [];
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const x = a[0] + ex * t;
+        const z = a[1] + ez * t;
+        const top = roofAt(pieces, x - nx * 0.04, z - nz * 0.04);
+        const bottom = o >= 0 ? kept[o].eave + roofAt(oPieces, x + nx * 0.04, z + nz * 0.04) - eave : base - eave;
+        samples.push([x, z, top, Math.min(top, Math.max(bottom, base - eave))]);
+      }
+      // Drop the samples a straight line through their neighbours would give anyway.
+      for (let k = 1; k + 1 < samples.length; ) {
+        const [p, q, r] = [samples[k - 1], samples[k], samples[k + 1]];
+        const lin = (j: number) => p[j] + (r[j] - p[j]) * 0.5;
+        if (Math.abs(q[2] - lin(2)) < 0.03 && Math.abs(q[3] - lin(3)) < 0.03) samples.splice(k, 1);
+        else k++;
+      }
+      let shown = false;
+      for (let k = 0; k + 1 < samples.length; k++) {
+        const [x0, z0, t0, b0] = samples[k];
+        const [x1, z1, t1, b1] = samples[k + 1];
+        if (t0 - b0 < 0.03 && t1 - b1 < 0.03) continue;
+        // Bottom then top along the ring's direction: clockwise seen from outside.
+        const q = [vert(x0, z0, b0, true), vert(x1, z1, b1, true), vert(x1, z1, t1, true), vert(x0, z0, t0, true)];
+        tri(q[0], q[2], q[1]);
+        tri(q[0], q[3], q[2]);
+        shown = true;
+      }
+      if (shown) stats.firewalls++;
+    }
+    party.push(rp);
+    canyon.push(rc);
   }
-  const tx = Math.floor((r.cx - box.x0) / FAR_TILE);
-  const tz = Math.floor((r.cz - box.z0) / FAR_TILE);
+  // Roof corners at the eaves that are the ring's own points go as references to them.
+  const near = new Map<string, number>();
+  let points = 0;
+  for (const r of bd.poly) for (const [x, z] of r) near.set(`${Math.round(x * 10)},${Math.round(z * 10)}`, points++);
+  const ringPoint = (u: { x: number; z: number; h: number; firewall: boolean }) => {
+    if (u.firewall || Math.abs(u.h) > 0.01) return -1;
+    const kx = Math.round(u.x * 10);
+    const kz = Math.round(u.z * 10);
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++) {
+        const i = near.get(`${kx + dx},${kz + dz}`);
+        if (i === undefined) continue;
+        const [px, pz] = flatRing(bd.poly, i);
+        if (Math.hypot(px - u.x, pz - u.z) < 0.02) return i;
+      }
+    return -1;
+  };
+  const own: typeof upper = [];
+  const remap = upper.map((u) => {
+    const i = ringPoint(u);
+    if (i >= 0) return i;
+    own.push(u);
+    return points + own.length - 1;
+  });
+  const tris = triangles.map((i) => remap[i]);
+  stats.upper += own.length;
+  stats.triangles += tris.length / 3;
+  const tx = Math.floor((bd.cx - box.x0) / FAR_TILE);
+  const tz = Math.floor((bd.cz - box.z0) / FAR_TILE);
   const key = `${tx},${tz}`;
   let tile = tilesMap.get(key);
   if (!tile) tilesMap.set(key, (tile = { x: box.x0 + tx * FAR_TILE, z: box.z0 + tz * FAR_TILE, buildings: [] }));
-  tile.buildings.push({ base, eave: r.eave, rise, wall: r.wall, roof: r.roof, ring: clean.ring, hidden: clean.hidden });
-  walls += clean.ring.length;
-  hiddenWalls += clean.hidden.filter(Boolean).length;
-}
+  // Colours go to the runtime linear, as the world's vertex colours do (tools/lib/gltf.ts).
+  tile.buildings.push({ base, eave, wall: linear(bd.wall), roof: linear(bd.roof), facade: bd.facade, roofLayer: bd.roofLayer, seed: bd.seed, rings: bd.poly, party, canyon, upper: own, triangles: tris });
+});
 const farTiles = [...tilesMap.values()].sort((p, q) => p.z - q.z || p.x - q.x);
 const buildingCount = farTiles.reduce((s, t) => s + t.buildings.length, 0);
 const buildingsSize = writeDataBytes("far/buildings.bin", encodeFarBuildings(farTiles, { license: [ODBL] }));
-lap(`${buildingCount} far buildings (of ${raws.length} outside the world) in ${farTiles.length} tiles; ${hipped} hipped roofs; ${hiddenWalls} of ${walls} walls party walls`);
+lap(`${buildingCount} far buildings in ${farTiles.length} tiles, roofs and walls in ${((performance.now() - tRoofs) / 1000).toFixed(0)} s: ${JSON.stringify(stats)}`);
 
 // --- 5. Water, bridges and towers -----------------------------------------------------------------
 
@@ -947,7 +1091,7 @@ const beacons: number[] = [];
       [x, z] = centroid(polys[0][0]);
     }
     if (inWorld(x, z) || !inBox(x, z)) continue;
-    const tagged = num(p.height);
+    const tagged = Number.parseFloat(p.height ?? "");
     const h = Number.isFinite(tagged) ? tagged : kind === "communications_tower" ? 120 : kind === "mast" ? 50 : kind === "chimney" ? 40 : 0;
     if (h < (kind === "chimney" || kind === "mast" || kind === "communications_tower" ? 30 : 40)) continue;
     const y0 = ground.sample(x, z) - 1;

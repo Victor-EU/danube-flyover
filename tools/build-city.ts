@@ -27,13 +27,13 @@ import { inPart, placeParts, type LandmarksJson } from "../src/world/landmarks";
 import { River, type RiverJson } from "../src/world/river";
 import { Terrain, TERRAIN_CLASS } from "../src/world/terrain";
 import { centroid, hash01, minAreaRect, mulberry32, pointInPolygon, pointInRing, polygonArea, projectPolygons, ringBox, round2, signedArea, simplifyRing, type Polygon, type Pt } from "./lib/geom";
-import { blockPieces, buildBlocks, clipPieces, initSkeleton, mansard, pieceHeight, pitched, roofHeightAt, type Profile } from "./lib/roofs";
+import { BUDA, CANYON_OPEN, CANYON_UNIT, canyonProbe, districtLookup, facadeOf, LAYER_FIREWALL, LAYER_TRIM, loadDistricts, MODERN, num, OPEN, pick, profileFor, ROOF_LAYER, roofCovering, ROOFS, shapeOf, TRIM, WALLS, type RoofKind } from "./lib/cityStyle";
+import { blockPieces, buildBlocks, clipPieces, initSkeleton, pieceHeight, roofHeightAt, type Profile } from "./lib/roofs";
 import { writeGlb, type MeshDef } from "./lib/gltf";
 import { kb, ODBL, readData, readDataBytes, readOsm, writeData, writeDataBytes } from "./lib/io";
 
 /** UVs are stored in units of this many metres, so they quantise into [0, 1]. */
 const UV_UNIT = 1024;
-const LEVEL = 3.3;
 
 const b = worldBounds();
 const river = new River(readData<RiverJson>("river.json"));
@@ -57,95 +57,7 @@ const inBounds = (x: number, z: number, m = 0) => x > b.x0 + m && x < b.x1 - m &
 
 // --- Districts ------------------------------------------------------------------------------
 
-const districts = readOsm("districts")
-  .filter((f) => f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
-  .map((f) => ({ name: f.properties.name ?? f.properties.id, polys: projectPolygons(f.geometry) }));
-const districtOf = (x: number, z: number) => districts.find((d) => d.polys.some((p) => pointInPolygon(p, x, z)))?.name ?? "other";
-// Buda is everything west of the river; its districts get the Buda palette.
-const BUDA = new Set(["I. kerület", "II. kerület", "III. kerület", "XI. kerület", "XII. kerület"]);
-
-// --- Heights and roof kinds ------------------------------------------------------------------
-
-const num = (v: string | undefined) => {
-  if (!v) return NaN;
-  const m = /^\s*([0-9]+(?:[.,][0-9]+)?)\s*(m|ft|')?\s*$/.exec(v);
-  if (!m) return NaN;
-  const n = Number(m[1].replace(",", "."));
-  return m[2] === "ft" || m[2] === "'" ? n * 0.3048 : n;
-};
-const SMALL = new Set(["garage", "garages", "shed", "hut", "kiosk", "carport", "service", "toilets", "cabin", "transformer_tower", "bunker"]);
-const HOUSE = new Set(["house", "detached", "semidetached_house", "bungalow", "villa", "terrace"]);
-const CHURCH = new Set(["church", "cathedral", "chapel"]);
-const MODERN = new Set(["office", "commercial", "retail", "industrial", "warehouse", "hospital", "university", "parking", "train_station", "transportation", "service", "garages"]);
-type RoofKind = "pitched" | "mansard" | "steep" | "flat";
-
-/**
- * The wall height (to the eaves) and the roof. OSM's `height` is to the top of the roof;
- * `building:levels` counts the storeys under it, the ground floor a little taller. Untagged
- * blocks get 15–21 m, the inner districts' typical five or six storeys.
- */
-function shapeOf(p: Record<string, string | undefined>, area: number, u: number): { eave: number; kind: RoofKind; roofLevels: number; source: "height" | "levels" | "default" } {
-  const t = p.building ?? "yes";
-  const shape = p["roof:shape"];
-  const rl = num(p["roof:levels"]);
-  const roofLevels = Number.isFinite(rl) ? rl : 0;
-  let kind: RoofKind;
-  if (shape === "flat") kind = "flat";
-  else if (shape === "mansard" || shape === "gambrel") kind = "mansard";
-  else if (shape === "dome" || shape === "cone" || shape === "pyramidal" || CHURCH.has(t)) kind = "steep";
-  else if (shape) kind = "pitched";
-  else if (MODERN.has(t) || SMALL.has(t) || (t === "yes" && area > 3000)) kind = "flat";
-  else kind = roofLevels >= 1 ? "mansard" : "pitched";
-
-  const h = num(p.height);
-  const lv = num(p["building:levels"]);
-  let eave: number;
-  let source: "height" | "levels" | "default";
-  if (Number.isFinite(h) && h > 0) {
-    source = "height";
-    eave = kind === "flat" ? h : h - Math.min(kind === "steep" ? h * 0.35 : 5, h * 0.3);
-  } else if (Number.isFinite(lv) && lv > 0) {
-    source = "levels";
-    eave = lv * LEVEL + 1.2;
-  } else {
-    source = "default";
-    if (SMALL.has(t)) eave = 3.2;
-    else if (HOUSE.has(t)) eave = 6.5 + 2 * u;
-    else if (t === "ruins") eave = 4;
-    else if (CHURCH.has(t)) eave = 14;
-    else if (t === "industrial" || t === "warehouse") eave = 9;
-    // Small untagged footprints are kiosks, pavilions and sheds rather than blocks of flats.
-    else if (area < 90) eave = 3.5 + 1.5 * u;
-    else if (area < 220) eave = 7 + 4 * u;
-    else eave = 15 + 6 * u;
-  }
-  if (kind !== "flat" && eave > 34) kind = "flat";
-  return { eave: Math.min(Math.max(eave, 2.5), 120), kind, roofLevels, source };
-}
-
-// --- Palettes ---------------------------------------------------------------------------------
-
-const hex = (s: string): [number, number, number] => [parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255];
-// Budapest's plaster: ochres, creams, greys and the odd pastel, aged.
-const WALLS = {
-  pest: ["#d9c9a8", "#cdb48c", "#e0d4b8", "#c8a984", "#d4bfa0", "#bfa98a", "#d8bf98", "#c9b79c", "#b9ab98", "#d6c6b2", "#c4b08f", "#a99a86", "#d8c2a2", "#cbbfae"].map(hex),
-  buda: ["#d8cdb5", "#c9b99c", "#bfae8f", "#d1c4a6", "#ddd3bf", "#cfc0a2", "#e3d3a6", "#d3b98f"].map(hex),
-  castle: ["#e2d8c2", "#d5c7a6", "#cbbd9d", "#e6dcc8", "#e8d6a8"].map(hex),
-  modern: ["#b8b5ae", "#a9aaa6", "#c2bfb7", "#b3aea4", "#9fa3a6"].map(hex),
-};
-// Roofs from the air: weathered red-brown tile, dark slate and eternit, painted tin, copper.
-const ROOFS = {
-  tile: ["#9a5b45", "#8c4f3d", "#a86a4f", "#94604b", "#7f4c3c", "#a5644a", "#8a5a47"].map(hex),
-  slate: ["#5d5f63", "#6b6d70", "#545a60", "#626466", "#4f5458"].map(hex),
-  tin: ["#6f6a62", "#5f6660", "#7a7468", "#5a5f62"].map(hex),
-  copper: ["#6f9384", "#7a9d8c"].map(hex),
-  flat: ["#8f8d88", "#9c9a94", "#85827c", "#a5a29b"].map(hex),
-};
-const TRIM = {
-  chimney: ["#a86a50", "#b8a68e", "#9a6048", "#c2b39c"].map(hex),
-  unit: ["#9da0a0", "#b2b2ae", "#8d9091"].map(hex),
-};
-const pick = <T>(list: T[], u: number) => list[Math.min(list.length - 1, Math.floor(u * list.length))];
+const districtOf = districtLookup(loadDistricts());
 
 // --- Buildings --------------------------------------------------------------------------------
 
@@ -166,26 +78,6 @@ interface Building {
   facade: number;
   roofLayer: number;
   seed: number;
-}
-
-// --- Facade styles ------------------------------------------------------------------------------
-
-const F = Object.fromEntries(TEXTURES.facades.map((name, i) => [name, i])) as Record<string, number>;
-const ROOF_LAYER = { tile: 8, slate: 9, copper: 10, flat: 11, tin: 9 };
-/** Plain surfaces outside the texture array: trim (cornices, chimneys, parapets) and blank firewalls. */
-const LAYER_TRIM = 14;
-const LAYER_FIREWALL = 15;
-const PANEL_DISTRICTS = new Set(["III. kerület", "XIII. kerület", "XI. kerület"]);
-/** Which of the eight facade tiles a building wears, by type, district, height and bank. */
-function facadeOf(type: string, district: string, height: number, castle: boolean, u: number): number {
-  if (MODERN.has(type) || height > 32) return F.modern;
-  if (SMALL.has(type) || HOUSE.has(type)) return F.villa;
-  if (castle) return F.castle;
-  if (PANEL_DISTRICTS.has(district) && height >= 18 && (type === "apartments" || type === "residential" || type === "yes") && u < 0.4) return F.panel;
-  if (BUDA.has(district)) return height < 14 ? F.budaBaroque : u < 0.7 ? F.pestEclectic : F.pestClassic;
-  if (height < 9) return F.villa;
-  if (u < 0.16) return F.secession;
-  return district === "V. kerület" ? (u < 0.6 ? F.pestClassic : F.pestEclectic) : u < 0.3 ? F.pestClassic : F.pestEclectic;
 }
 
 const buildings: Building[] = [];
@@ -233,11 +125,7 @@ for (const f of readOsm("buildings")) {
     const shape = shapeOf(p, area, hash01(`${p.id}#${k}:height`));
     const castle = district === "I. kerület" && gAvg > 45;
     const walls = MODERN.has(type) ? WALLS.modern : castle ? WALLS.castle : BUDA.has(district) ? WALLS.buda : WALLS.pest;
-    let roofKind: keyof typeof ROOFS;
-    if (shape.kind === "flat") roofKind = "flat";
-    else if (shape.kind === "steep") roofKind = ur < 0.6 ? "slate" : "copper";
-    else if (shape.kind === "mansard") roofKind = ur < 0.7 ? "slate" : ur < 0.9 ? "tin" : "copper";
-    else roofKind = ur < (BUDA.has(district) ? 0.72 : 0.55) ? "tile" : ur < 0.85 ? "slate" : "tin";
+    const roofKind = roofCovering(shape.kind, BUDA.has(district), ur);
     buildings.push({
       id: `${p.id}${k ? `#${k}` : ""}`,
       district,
@@ -264,17 +152,8 @@ await initSkeleton();
 const tBlocks = performance.now();
 const { blocks, blockOf, failed: failedBlocks } = await buildBlocks(buildings.map((bd) => bd.poly));
 console.log(`blocks: ${blocks.length} (${failedBlocks} without a skeleton) in ${((performance.now() - tBlocks) / 1000).toFixed(1)} s`);
-/** Each block's pitch and cap, so neighbours share one roofline. */
-const blockPitch = (i: number) => [34, 37, 40, 43][Math.floor(hash01(`block${i}:pitch`) * 4)];
-const blockCap = (i: number) => 4.2 + 1.6 * hash01(`block${i}:cap`);
 function profileOf(bd: Building, block: number): Profile | null {
-  if (bd.kind === "flat" || block < 0) return null;
-  if (bd.kind === "steep") return pitched(52, Math.round(Math.min(12, (bd.eave - bd.base) * 0.45)));
-  if (bd.kind === "mansard") {
-    const rl = Math.max(1, Math.min(2, Math.round(bd.roofLevels || 1)));
-    return mansard(2.4 * rl + 0.4, 2.6 * rl + 1.6);
-  }
-  return pitched(blockPitch(block), Math.round(blockCap(block) * 2) / 2);
+  return block < 0 ? null : profileFor(bd.kind, bd.eave - bd.base, bd.roofLevels, `block${block}`);
 }
 
 // --- Meshes per district ------------------------------------------------------------------------
@@ -301,10 +180,19 @@ class MeshBuilder {
     this.facade.push(layer / FACADE_LAYER_UNIT, h / FACADE_HEIGHT_UNIT);
     return this.pos.length / 3 - 1;
   }
-  /** A quad a, b, c, d (counter-clockwise seen from the front) with one normal. */
+  /** A quad a, b, c, d (in order round its edge) with one normal, wound to face along it. */
   quad(p: number[][], n: number[], c: number[], uvs: number[][], s: number, layer: number, h: number): void {
     const i = p.map((q, k) => this.vertex(q[0], q[1], q[2], n[0], n[1], n[2], c, uvs[k][0], uvs[k][1], s, layer, h));
-    this.idx.push(i[0], i[1], i[2], i[0], i[2], i[3]);
+    this.facets(i, p, n);
+  }
+  /** Two triangles over the quad of vertices `i` (at `p`), wound so their front faces along `n`. */
+  facets(i: number[], p: number[][], n: number[]): void {
+    // The diagonals' cross product is the quad's area vector, even with one corner collapsed.
+    const u = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
+    const v = [p[3][0] - p[1][0], p[3][1] - p[1][1], p[3][2] - p[1][2]];
+    const along = (u[1] * v[2] - u[2] * v[1]) * n[0] + (u[2] * v[0] - u[0] * v[2]) * n[1] + (u[0] * v[1] - u[1] * v[0]) * n[2];
+    if (along >= 0) this.idx.push(i[0], i[1], i[2], i[0], i[2], i[3]);
+    else this.idx.push(i[0], i[2], i[1], i[0], i[3], i[2]);
   }
 }
 
@@ -330,41 +218,7 @@ function emitFlat(m: MeshBuilder, poly: Polygon, y: (x: number, z: number) => nu
   }
 }
 
-/**
- * Baked occlusion: from a point at the foot of a street wall, the first building straight out
- * along its normal (within CANYON_OPEN metres) and how high its eaves stand above this wall's
- * base. The shader turns the angle to that skyline into ambient occlusion up the wall, so
- * narrow streets and courtyards darken toward the ground.
- */
-const CANYON_OPEN = 96;
-const CANYON_UNIT = 128;
-const OPEN: [number, number] = [CANYON_OPEN, 0];
-const GRID = 20;
-const byCell = new Map<number, number[]>();
-buildings.forEach((bd, i) => {
-  const bx = ringBox(bd.poly[0]);
-  for (let gx = Math.floor(bx.minX / GRID); gx <= Math.floor(bx.maxX / GRID); gx++)
-    for (let gz = Math.floor(bx.minZ / GRID); gz <= Math.floor(bx.maxZ / GRID); gz++) {
-      const key = gx * 100003 + gz;
-      const list = byCell.get(key);
-      if (list) list.push(i);
-      else byCell.set(key, [i]);
-    }
-});
-function facing(x: number, z: number, nx: number, nz: number, self: number, base: number): [number, number] {
-  for (let t = 0.6; t < CANYON_OPEN; t += 0.8) {
-    const px = x + nx * t;
-    const pz = z + nz * t;
-    for (const i of byCell.get(Math.floor(px / GRID) * 100003 + Math.floor(pz / GRID)) ?? []) {
-      if (i === self) continue;
-      const o = buildings[i];
-      if (pointInPolygon(o.poly, px, pz)) return [t, o.eave + (o.kind === "flat" ? 0.9 : 2.5) - base];
-    }
-    // A courtyard: the far side of this building's own ring.
-    if (t > 1.5 && pointInPolygon(buildings[self].poly, px, pz)) return [t, buildings[self].eave + 2.5 - base];
-  }
-  return OPEN;
-}
+const facing = canyonProbe(buildings);
 
 /** _FACADE stores (layer / 16, wall height / 128 m), so it quantises into [0, 1]. */
 const FACADE_LAYER_UNIT = 16;
@@ -435,7 +289,7 @@ buildings.forEach((bd, bi) => {
         return m.vertex(q[0], q[1], q[2], nx, 0, nz, bd.wall, wuv[k][0], wuv[k][1], seed, layer, wallH);
       });
       m.facing = OPEN;
-      m.idx.push(vi[0], vi[1], vi[2], vi[0], vi[2], vi[3]);
+      m.facets(vi, w, [nx, 0, nz]);
       if (e.party && pieces) {
         // The gable: the wall carried up to the roof's section along the party edge.
         const steps = Math.max(1, Math.ceil(l / 0.75));

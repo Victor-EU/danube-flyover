@@ -365,7 +365,9 @@ console.log("\n— Music —");
 // 6. The download budgets: the first-frame set, and all that loads without the music. Since
 // the realism pass size is no longer the design's constraint (the roofed city, the ground's
 // mask, the trees and the traffic outweigh the old 25 MB); these catch an accidental blow-up.
-const BUDGET = { first: 70, total: 90 };
+// The total rose to 100 MB with the far field's roofed buildings (13.6 MB of the 17.6), which
+// stream in after the first frame.
+const BUDGET = { first: 70, total: 100 };
 console.log("\n— Downloads —");
 {
   const root = new URL("../public/data/", import.meta.url);
