@@ -29,7 +29,7 @@ The route is about 5.5 km of river, and about 8.6 km flown once the arc around P
 
 - Survey accuracy. Buildings outside the hero list are their OSM footprints to their tagged (or typical) eaves, with roofs, cornices and chimneys made from rules and photographed facades, not modelled one by one.
 - A full flight or boat simulator. Movement is constrained to a corridor around the river spline.
-- The whole city. The world ends a few hundred metres back from each bank (further on Buda, to take in Castle Hill); beyond that is a painted backdrop.
+- The whole city in detail. The world ends a few hundred metres back from each bank (further on Buda, to take in Castle Hill); beyond it the far field carries the real city, hills and river on into the haze, simplified.
 - Multiplayer, accounts, or any backend. State lives in the browser.
 - Mobile as a first-class target in V1. It should run, but the tuning target is desktop.
 
@@ -72,7 +72,7 @@ The app opens in autopilot at golden hour, gliding above the Japanese Garden, an
 
 ## The world
 
-**Extent.** A corridor from the north tip of Margaret Island (47.535 N) to just south of Liberty Bridge (47.483 N), about 6 km long and 1.5 km wide, centred on the river, and widened to about 1 km west of the river between Batthyány tér and the Tabán so all of Castle Hill is inside. Scene units are metres; the origin is a simple equirectangular offset centred on the Chain Bridge (error under 1 m across the extent), with +X east, +Z south, +Y up, and the river surface at Y = 0. Everything outside the corridor is a backdrop.
+**Extent.** A corridor from the north tip of Margaret Island (47.535 N) to just south of Liberty Bridge (47.483 N), about 6 km long and 1.5 km wide, centred on the river, and widened to about 1 km west of the river between Batthyány tér and the Tabán so all of Castle Hill is inside. Scene units are metres; the origin is a simple equirectangular offset centred on the Chain Bridge (error under 1 m across the extent), with +X east, +Z south, +Y up, and the river surface at Y = 0. Everything outside the corridor is the far field: 26 km of OpenStreetMap and 50 km of terrain, simplified (see layer 7).
 
 **Scene layers**, from the bottom up:
 
@@ -82,7 +82,7 @@ The app opens in autopilot at golden hour, gliding above the Japanese Garden, an
 4. *Filler buildings*: OSM footprints extruded to their eaves (tagged height less the roof, or levels × 3.3 m, or 15–21 m), roofed from their block's straight skeleton (pitched, mansard, steep or flat), with firewalls, cornices, parapets, chimneys and rooftop units, merged into one mesh per 320 m tile, textured with 8 photographed facade atlases chosen by district and height and baked street-canyon occlusion. Window emissive mask for night.
 5. *Hero landmarks*: modelled in code (`tools/heroes/`) on their OSM footprints and the bridges' decks: Parliament, Buda Castle, Fisherman's Bastion with Matthias Church, Chain Bridge, Elisabeth Bridge, Liberty Bridge, Margaret Bridge, Gellért Hotel, Liberty Statue, Central Market Hall, and with the same kit the other landmarks on the cards. Each under 20k triangles, textured from shared day layers, with window masks for the night.
 6. *Vegetation*: Margaret Island, the streets and the hills as instanced trees of nine species, grown procedurally (branches and leaf cards), at three levels of detail by distance.
-7. *Backdrop*: a ring of painted hills and city silhouette at 2 km, plus the skydome.
+7. *Far field*: beyond the world, the real terrain to 25 km (the Buda hills and the Pilis), its ground painted from OpenStreetMap (land use, woods, streets, roofs, and the street light at night), 121,000 buildings extruded from their footprints within 6 km (and the tall ones further), the river, its bridges and the towers and chimneys with their aviation lights; it loads after the first frame. Plus the skydome.
 8. *Life*: trams on both embankments, two sightseeing boats on a loop up and down the river, river-cruise ships moored at the pontoons, parked cars and traffic on the main roads, and flocks of gulls (left out on the low tier).
 9. *Ground*: the streets painted onto the terrain from a 1 m mask (carriageway distance field, lawns, paths, setts), with photographed asphalt, paving, setts, lawn and gravel, ground occlusion, and markings and tram rails as geometry.
 
@@ -155,7 +155,7 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `camera` | Third-person rig behind the vehicle with per-mode offsets, camera keys (1.5 s blends between camera modes), and the landing/take-off blend | vehicle pose, route camera keys | three.js camera |
 | `cards` | Landmark card triggers: radius, view cone, one at a time, once per pass | vehicle pose, camera, landmarks | current card |
 | `tour` | The loop and the beat jumps, both cut through black | autopilot, keys | fade, reset |
-| `scene` | Loads and places terrain, water, city, heroes, trees, backdrop; owns the surface shaders (facades, quays, floodlights), the water shader and the night light groups with the point-light pool (`world/`) | assets | three.js scene graph |
+| `scene` | Loads and places terrain, water, city, heroes, trees, the far field; owns the surface shaders (facades, quays, floodlights), the water shader and the night light groups with the point-light pool (`world/`) | assets | three.js scene graph |
 | `lighting` | Sun and moon directional lights, hemisphere light, the sky dome (`sky`), fog, exposure and bloom curves, the shared night ramp; every curve keyed to sun elevation | time of day | light state |
 | `hud` | Bottom bar, time slider, mode badge, music button, OSM credit, landmark cards, about overlay | state | DOM |
 | `audio` | The music: off until turned on from a user gesture (remembered); two streamed media elements crossfading over 6 s into the next track for the light (day tracks until dusk, night tracks after); a Web Audio gain for the volume and a safety limiter; pauses with a hidden tab | audio.json, night ramp | sound |

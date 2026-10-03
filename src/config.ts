@@ -61,6 +61,16 @@ export const WORLD = {
   quayWidth: 40,
 };
 
+/**
+ * The far field (tools/build-far.ts, src/world/far.ts): the city, the hills and the river
+ * beyond the world, out into the haze. OpenStreetMap is fetched over `box` (26 km square);
+ * the terrain goes on, coarser, over `wide` (50 km), for the hills' silhouettes.
+ */
+export const FAR = {
+  box: { latMin: 47.4, latMax: 47.63, lonMin: 18.88, lonMax: 19.22 },
+  wide: { latMin: 47.29, latMax: 47.74, lonMin: 18.72, lonMax: 19.38 },
+};
+
 export const CAMERA = {
   glider: { back: 12, up: 4, fov: 70 },
   boat: { back: 7.5, up: 2, fov: 60 },
@@ -156,6 +166,8 @@ export const QUALITY = {
   life: true,
   /** Wave simulation cells a side, a power of 2 (WAKE.cell metres each); 0: the plain foam trail. */
   wake: 512,
+  /** Metres from the camera within which the far field's buildings are drawn. */
+  far: 12000,
 };
 
 /**

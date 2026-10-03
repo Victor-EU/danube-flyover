@@ -32,10 +32,10 @@ import type { Wake } from "./wake";
 
 /**
  * Layers kept out of the reflection: the water itself, its streaks, the trees, the labels, the
- * roofs' small detail (chimneys, rooftop units), and the full terrain, which a coarse one (on
- * MIRROR_ONLY) stands in for there.
+ * roofs' small detail (chimneys, rooftop units), the full terrain, which a coarse one (on
+ * MIRROR_ONLY) stands in for there, and the far field.
  */
-export const LAYER = { water: 1, trees: 2, labels: 3, terrain: 4, details: 6 };
+export const LAYER = { water: 1, trees: 2, labels: 3, terrain: 4, details: 6, far: 7 };
 /** Drawn only in the reflection. */
 export const MIRROR_ONLY = 5;
 /**
@@ -396,5 +396,5 @@ class Mirror {
 const UP = new Vector3(0, 1, 0);
 
 function mirrorLayers(main: Layers): number {
-  return (main.mask & ~((1 << LAYER.water) | (1 << LAYER.trees) | (1 << LAYER.labels) | (1 << LAYER.terrain) | (1 << LAYER.details))) | (1 << MIRROR_ONLY);
+  return (main.mask & ~((1 << LAYER.water) | (1 << LAYER.trees) | (1 << LAYER.labels) | (1 << LAYER.terrain) | (1 << LAYER.details) | (1 << LAYER.far))) | (1 << MIRROR_ONLY);
 }

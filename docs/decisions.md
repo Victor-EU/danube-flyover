@@ -2,6 +2,58 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-03 — The far field
+
+The world ended a few hundred metres back from the banks, in a flat beige plain: high views showed the edge, and the Buda hills weren't there. With the user's go-ahead, two more downloads fill it with the real city.
+
+**The data**
+
+- **OpenStreetMap**, over a 26 km box (47.40–47.63 N, 18.88–19.22 E), from Overpass in 27 tiled queries, about 40 MB over the wire:
+  - 292,711 buildings, 73,808 streets and rails, 17,789 land areas;
+  - the water, 1,067 towers, masts and chimneys, and 2,018 bridge ways.
+  - It's committed gzipped in `tools/osm/far/` (17 MB), with coordinates to 10 cm.
+- **Copernicus GLO-30**, the same AWS tiles plus N47 E018 for the hills west of 19° E:
+  - the box at 30 m, and a 50 km window at 120 m for the Pilis and the hills beyond;
+  - 2.5 MB in `tools/dem/`.
+
+**The build** (`tools/build-far.ts`, 8 s)
+
+- **Terrain:**
+  - The surface model has its buildings taken out: footprints dilated a sample, and the trees in streets, parks and gardens, where they stand 2.5 m clear of a 200 m opening. These are filled in from around them, starting from that opening.
+  - The woods keep their canopy, the river gets its bed, and everything blends into the world's own terrain over 600 m, running 2 m under it inside.
+  - Two grids: 40 m over the box, 160 m over the 50 km square.
+- **Ground:** painted at 6 m and halved to a 2048² texture (12.5 m). It has:
+  - land use, biggest first;
+  - the woods in autumn colours by noise at three scales;
+  - streets and rails by class;
+  - every roof.
+  - Alpha is the street light, so the WebP has to keep the colour under alpha 0 (`exact`); without it the encoder smeared the woods into stripes.
+- **Buildings:**
+  - 121,560 outside the world: all within 6 km of it, and the tall or big ones beyond. The rest are only roofs in the ground.
+  - Heights come from the tags, or from rules like the world's.
+  - Party walls are dropped where OSM's neighbours share nodes and stand within 3 m of each other's height.
+  - Small rectangular houses get hipped roofs.
+  - Each is written as a footprint (3.3 MB), not as geometry.
+- **Water, bridges and towers:**
+  - the water beyond the world, plus the river beyond the box from the wide grid;
+  - 48 bridge decks on piers, ramping to the banks, with their lamps;
+  - 548 towers, masts and chimneys, the tall ones banded red and white, with 353 aviation lights.
+
+**The runtime** (`src/world/far.ts`)
+
+- **Loading:** it streams in after the first frame (7 MB), compiles off the frame, then replaces the apron and frame.
+- **Terrain:** chunks at 40, 80 or 160 m by their distance from the world (160 and 320 m in the wide square), with skirts.
+- **Buildings:**
+  - A worker extrudes them per 1 km tile, sharing vertices between walls and roof.
+  - The material is flat-shaded from screen derivatives, and tells roof from wall by slope.
+  - Windows are drawn by storey and bay, faded to their average where they're smaller than a pixel. A third of them are lit at random after dusk, with shopfronts below.
+  - Tiles are drawn within `QUALITY.far`: 12, 7 or 3.5 km.
+- **Layer and shadows:** all of it is on `LAYER.far`, out of the reflection, with no shadows.
+- **Cost:** 1–3 ms a frame on the M3 (4.3M triangles in the busiest view).
+- **Haze:** thinned by about a third, so the hills 7 km west show through by day.
+
+**What stays simple:** the far buildings are boxes with flat or hipped roofs, without the world's cornices, chimneys or photographed facades. Up close at the world's edge the change shows; from the glider's usual kilometre and more it reads as the city.
+
 ## 2026-10-03 — The wake, simulated
 
 The wake was three foam ribbons on a flat river: no waves, nothing when the boat turned or stopped. Now the water around the boat is simulated, and everything a wake does comes out of the waves themselves.

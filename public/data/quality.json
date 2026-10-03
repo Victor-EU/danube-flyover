@@ -3,8 +3,8 @@
   "start": { "desktop": "high", "touch": "medium" },
   "probe": { "warmup": 0.6, "seconds": 2, "slowMs": 22, "maxSteps": 2 },
   "tiers": {
-    "high": { "pixelRatio": 2, "shadowMapSize": 2048, "reflections": true, "reflectionScale": 0.5, "bloom": true, "samples": 4, "trees": 1, "cars": 1, "anisotropy": 8, "life": true, "wake": 512 },
-    "medium": { "pixelRatio": 1.5, "shadowMapSize": 1024, "reflections": true, "reflectionScale": 0.4, "bloom": true, "samples": 2, "trees": 0.6, "cars": 0.6, "anisotropy": 4, "life": true, "wake": 256 },
-    "low": { "pixelRatio": 1, "shadowMapSize": 0, "reflections": false, "reflectionScale": 0.4, "bloom": false, "samples": 0, "trees": 0.35, "cars": 0, "anisotropy": 2, "life": false, "wake": 0 }
+    "high": { "pixelRatio": 2, "shadowMapSize": 2048, "reflections": true, "reflectionScale": 0.5, "bloom": true, "samples": 4, "trees": 1, "cars": 1, "anisotropy": 8, "life": true, "wake": 512, "far": 12000 },
+    "medium": { "pixelRatio": 1.5, "shadowMapSize": 1024, "reflections": true, "reflectionScale": 0.4, "bloom": true, "samples": 2, "trees": 0.6, "cars": 0.6, "anisotropy": 4, "life": true, "wake": 256, "far": 7000 },
+    "low": { "pixelRatio": 1, "shadowMapSize": 0, "reflections": false, "reflectionScale": 0.4, "bloom": false, "samples": 0, "trees": 0.35, "cars": 0, "anisotropy": 2, "life": false, "wake": 0, "far": 3500 }
   }
 }

@@ -8,6 +8,7 @@ This is **the realism pass** (3 October; see the decisions log) on top of M4's h
 - the ground: streets, kerbs, pavements, lawns, gravel paths and Castle Hill's setts from OpenStreetMap, in photographed materials, with lane markings, zebras and tram rails, and the street lamps' glow at night;
 - trees of nine species, grown in code from branches and leaf clusters, at three levels of detail, each with its own autumn;
 - the boat: a 1960s varnished-mahogany runabout with leather benches, a chrome-framed windscreen and the Hungarian flag;
+- the far field: the city, the Buda hills and the river beyond the world, out into the haze, from a 26 km OpenStreetMap extract and a 50 km terrain window (121,000 buildings, woods in autumn, the street grid lit at night, the bridges and chimneys);
 - the wake: the river around the boat simulated as real waves (an FFT on the GPU), so it makes a true V that curves through turns and runs on after a stop, the tour boats make theirs, they cross, and the boat rides them; with white water, lace, spray and a glassy scar;
 - the river's craft: sightseeing boats, river-cruise ships moored at the real pontoons, and the pontoons themselves;
 - traffic: parked cars along the side streets and cars on the main roads, lit after dusk;
@@ -80,7 +81,9 @@ The world is built offline by the scripts in `tools/` and committed, so the site
 
 ```bash
 npm run fetch-osm    # 1. OpenStreetMap layers -> tools/osm/*.geojson (Overpass; slow, retries on 504)
+npm run fetch-osm -- far   # the far field's layers over a 26 km box, in tiles -> tools/osm/far/*.geojson.gz (about 15 minutes)
 npm run fetch-dem    #    Copernicus GLO-30 window -> tools/dem/ (cloud-optimised GeoTIFF on AWS)
+npm run fetch-dem -- far   # the far field's windows: 26 km at 30 m, 50 km at 120 m
 npm run build-world  # 2-8. everything below, in order (about 2 minutes, deterministic)
 npm run build-trees  #    the tree species and their leaf clusters (not in build-world)
 ```
@@ -95,6 +98,7 @@ npm run build-trees  #    the tree species and their leaf clusters (not in build
 | 7 | `build-life.ts` | `life.json`: the tram lines along both embankments, the landing pontoons and the cruise ships moored at them |
 | 8 | `build-floor.ts` | `floor.bin`: the glider's 5 m altitude-floor grid (with the moored ships) |
 | 8b | `build-ground.ts` | `ground/`: the 1 m mask the terrain paints the streets, lawns, paths and setts with, the ground's occlusion, the markings and tram rails, the main roads' graph for the traffic, and the parked cars |
+| 8c | `build-far.ts` | `far/`: the far field. The terrain beyond the world (the surface model with its buildings filled in and the trees in streets and parks taken off, the woods' canopy kept, blended into the world's own terrain), its painted ground (land use, autumn woods, streets, rails, roofs; alpha the street light), the buildings outside the world as footprints for the runtime to extrude, and the water, bridges and towers beyond it (`-- --debug <dir>` writes hillshades and the ground) |
 | – | `build-trees.ts` | `trees/`: each species grown in three shapes at three levels of detail, and the leaf clusters |
 | 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface (facades, roofs, plaster), ground and hero array textures, quay, water normal map and skies as WebP, and `tex/full/`, the layers and quay at full size and the skies at 4096 × 2048 as KTX2 (about 3 minutes to encode); and `docs/style-sheet.webp` |
 
@@ -128,7 +132,7 @@ The music isn't part of `build-world`. To change it, download the originals into
 
 ## Layout
 
-- `public/data/`: everything the runtime loads, about 73 MB, plus 16.4 MB of music streamed only once it's turned on (`tex/` is the textures, `heroes/` the landmarks' models, `cards/` their pictures, `ground/` the streets, `trees/` the species, `audio/` the music).
+- `public/data/`: everything the runtime loads, about 80 MB, plus 16.4 MB of music streamed only once it's turned on (`tex/` is the textures, `heroes/` the landmarks' models, `cards/` their pictures, `ground/` the streets, `trees/` the species, `audio/` the music).
   - Hand-edited: `route.json` (the autopilot route, its beats and camera keys), `landmarks.json` (models, cards, trigger radii), `quality.json` (the tiers) and `audio.json` (the tracks, their credits and light).
   - Built by the pipeline: the rest.
 - `src/`: one module per job.
@@ -138,10 +142,10 @@ The music isn't part of `build-world`. To change it, download the originals into
   - `riva` (the runabout), `vehicleMesh` (it and the glider), and `ships` (the river's craft).
   - `audio`: the music, its button and the playlist.
   - `sim` is the simulation step shared by the browser and `tools/simulate.ts`.
-  - `world/` reads the pipeline's files: `river`, `terrain`, `floor`, `bridges`, `landmarks`, `trees` (the forest and its levels of detail), `roofBits`, `ground` (the streets' mask and shader), `traffic` and `gridFile` (the binary grid format). It also holds the hero models (`heroes`), the surfaces' shader patches (`surfaces`, `shaderPatch`), the river (`water`), its waves (`wake`, on the GPU FFT in `fft`), and the night lights (`nightLights`, `night`).
+  - `world/` reads the pipeline's files: `river`, `terrain`, `floor`, `bridges`, `landmarks`, `trees` (the forest and its levels of detail), `roofBits`, `ground` (the streets' mask and shader), `traffic` and `gridFile` (the binary grid format). It also holds the hero models (`heroes`), the surfaces' shader patches (`surfaces`, `shaderPatch`), the river (`water`), its waves (`wake`, on the GPU FFT in `fft`), the far field (`far`, with `farWorker` extruding its buildings from `farFormat`'s file), and the night lights (`nightLights`, `night`).
 - `tools/`: the pipeline, the timetable, the simulator, the recorder and the music's encoder (`audio.ts`).
   - `tools/heroes/` models the landmarks: `kit.ts` is the modelling kit, `bridgeKit.ts` the bridges' shared parts.
-  - `tools/osm/` and `tools/dem/` hold the committed source extracts.
+  - `tools/osm/` and `tools/dem/` hold the committed source extracts (`tools/osm/far/` the far field's, gzipped).
   - `tools/textures/` paints the texture set; `tools/prompts/` holds the image-API prompts.
   - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers (`imageApi.ts`: the client, its cache and costs), and the roofs (`roofs.ts`, with `skeletonWorker.ts`); `tools/textures/api.ts` plans the API texture set and fixes its seams.
   - `tools/lib/ktx2.ts` encodes the full-size textures (Basis Universal: ETC1S for the layers, UASTC for the skies, through `ktx2-encoder`'s WebAssembly build).
@@ -158,6 +162,6 @@ The source code is under the MIT License (`LICENSE`), and so are the project's t
 ## Credits
 
 - Map data © OpenStreetMap contributors, ODbL 1.0. The extracts in `tools/osm/` and the files derived from them in `public/data/` are ODbL databases (see `tools/osm/README.md`).
-- Terrain contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.
+- Terrain contains modified Copernicus DEM GLO-30 data (the tiles N47 E018 and N47 E019), © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.
 - Music: "Bossa Antigua", "Backbay Lounge", "Smooth Lovin" and "Night in Venice", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). Trimmed, levelled and re-encoded for the web.
 - Software: three.js (MIT), with the Basis Universal transcoder it ships (Apache 2.0, Binomial LLC), which the build copies to `assets/`. The build tools (not the app) use `straight-skeleton` (MIT, StrandedKitty), a WebAssembly build of CGAL's straight skeleton (GPL; cgal.org), for the roofs.

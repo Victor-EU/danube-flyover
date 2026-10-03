@@ -375,9 +375,13 @@ console.log("\n— Downloads —");
   const audio = sizeOf(new URL("audio/", root)) / 1e6;
   const cards = sizeOf(new URL("cards/", root)) / 1e6;
   const full = sizeOf(new URL("tex/full/", root)) / 1e6;
-  const first = all - audio - cards - full;
+  const far = sizeOf(new URL("far/", root)) / 1e6;
+  const first = all - audio - cards - full - far;
   check(first <= BUDGET.first, `${first.toFixed(1)} MB in the first-frame set, within its ${BUDGET.first} MB`);
-  check(first + full + cards <= BUDGET.total, `${(first + full + cards).toFixed(1)} MB with the full-size textures (${full.toFixed(1)} MB, after the first frame) and the cards (${cards.toFixed(1)} MB), within the ${BUDGET.total} MB initial download`);
+  check(
+    first + full + far + cards <= BUDGET.total,
+    `${(first + full + far + cards).toFixed(1)} MB with what streams in after the first frame (the full-size textures ${full.toFixed(1)} MB, the far field ${far.toFixed(1)} MB) and the cards (${cards.toFixed(1)} MB), within the ${BUDGET.total} MB initial download`,
+  );
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");

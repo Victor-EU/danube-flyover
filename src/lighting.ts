@@ -32,7 +32,8 @@ const SUN_COLOR: ColorKeys = [[0, "#ff6a2a"], [2, "#ff8c42"], [6, "#ffb469"], [1
 const HEMI_INTENSITY: Keys = [[-18, 0.06], [-12, 0.07], [-6, 0.15], [0, 0.32], [6, 0.5], [10, 0.6], [40, 0.66]];
 /** The ground half is the haze below the horizon, this much darker than the sky half. */
 const HEMI_GROUND: Keys = [[-12, 0.2], [0, 0.25], [10, 0.33]];
-const FOG_DENSITY: Keys = [[-18, 0.00034], [-6, 0.00032], [0, 0.00028], [6, 0.00022], [15, 0.00017], [40, 0.00016]];
+// Thinner since the far field: the hills 7 km west show through about a third of haze by day.
+const FOG_DENSITY: Keys = [[-18, 0.00026], [-6, 0.00024], [0, 0.0002], [6, 0.00015], [15, 0.00012], [40, 0.00011]];
 const EXPOSURE: Keys = [[-12, 0.5], [0, 0.7], [6, 0.7], [10, 1], [40, 1]];
 const TURBIDITY: Keys = [[0, 9], [10, 5], [40, 3]];
 const RAYLEIGH: Keys = [[-6, 3], [0, 2.6], [10, 1.4], [40, 1]];

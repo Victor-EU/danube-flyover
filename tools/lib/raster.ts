@@ -139,20 +139,23 @@ export class Raster {
 
 /**
  * Fills the samples where `mask` is non-zero by relaxing toward their neighbours (Jacobi
- * iterations of Laplace's equation), keeping the unmasked samples fixed.
+ * iterations of Laplace's equation), keeping the unmasked samples fixed. The masked samples
+ * start from the mean of the unmasked ones, or (`fromGiven`) from their own values in `r`.
  */
-export function inpaint(r: Raster, mask: Uint8Array, iterations: number): Raster {
+export function inpaint(r: Raster, mask: Uint8Array, iterations: number, fromGiven = false): Raster {
   const out = r.clone();
   const { nx, nz } = r;
-  // Start masked samples from the mean of the unmasked ones so convergence is quicker.
-  let mean = 0;
-  let n = 0;
-  for (let k = 0; k < mask.length; k++) if (!mask[k]) {
-    mean += r.data[k];
-    n++;
+  if (!fromGiven) {
+    // Start masked samples from the mean of the unmasked ones so convergence is quicker.
+    let mean = 0;
+    let n = 0;
+    for (let k = 0; k < mask.length; k++) if (!mask[k]) {
+      mean += r.data[k];
+      n++;
+    }
+    mean /= Math.max(1, n);
+    for (let k = 0; k < mask.length; k++) if (mask[k]) out.data[k] = mean;
   }
-  mean /= Math.max(1, n);
-  for (let k = 0; k < mask.length; k++) if (mask[k]) out.data[k] = mean;
   const next = out.data.slice();
   for (let it = 0; it < iterations; it++) {
     for (let j = 0; j < nz; j++)

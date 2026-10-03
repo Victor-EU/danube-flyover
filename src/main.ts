@@ -35,6 +35,7 @@ import { setAnisotropy, upgradeTextures } from "./textures";
 import { VehicleMesh } from "./vehicleMesh";
 import { SHARED } from "./world/night";
 import { NightLights } from "./world/nightLights";
+import { Far } from "./world/far";
 import { Wake, type WakeBlock } from "./world/wake";
 import { LAYER, Water } from "./world/water";
 import { buildWorld } from "./world/world";
@@ -134,6 +135,7 @@ async function main(): Promise<void> {
     `night      ${night.counts.lamps} lamps, ${night.counts.bulbs} bulbs, ${night.counts.streaks} streaks; floodlit ${night.floodlit.length}`,
     `effects    ${effects.describe()}`,
     `waves      ${wake.describe()}`,
+    `far        ${far?.describe() ?? "loading"}`,
     `quality    ${quality.describe()}`,
     `textures   ${models.textures.status}`,
     `music      ${sound.describe()}`,
@@ -174,6 +176,22 @@ async function main(): Promise<void> {
   const debug: { camera: PerspectiveCamera | null } = { camera: null };
   // ?textures=webp keeps the half-size WebP set, to compare.
   let upgrade: Promise<boolean> | null = params.get("textures") === "webp" ? Promise.resolve(false) : null;
+  // The far field streams in after the first frame too, then takes over from the apron and frame.
+  let far: Far | null = null;
+  let farLoad: Promise<void> | null = params.get("far") === "off" ? Promise.resolve() : null;
+  const loadFar = () =>
+    Far.load(renderer, world.bounds, world.water, async (file) => {
+      const res = await fetch(`data/${file}`);
+      if (!res.ok) throw new Error(`Couldn't load data/${file} (${res.status}).`);
+      return res.arrayBuffer();
+    })
+      .then(async (f) => {
+        await f.compile(renderer, rig.camera, scene);
+        scene.add(f.group);
+        for (const name of ["apron", "frame"]) world.group.getObjectByName(name)?.removeFromParent();
+        far = f;
+      })
+      .catch((err) => console.warn("far field:", err));
   const frame = (dt: number, draw = true) => {
     input.update(st);
     stepSim(sim, dt);
@@ -181,6 +199,7 @@ async function main(): Promise<void> {
     lighting.update(st, renderer, rig.focus, camera.position, dt);
     world.landmarks?.update(camera.position);
     world.update(camera, dt);
+    far?.update(camera, renderer.getDrawingBufferSize(tmpSize).y);
     vehicleMesh.update(st, dt, wake.motion);
     effects.update(st, dt, Math.min(1, lighting.hemi.intensity * 1.3 + lighting.sun.intensity * 0.2), wake);
     for (const s of effects.takeSplashes()) wake.splash(s);
@@ -200,13 +219,14 @@ async function main(): Promise<void> {
     post.draw();
     // The full-size textures stream in once the first frame is drawn, with the WebP set.
     upgrade ??= upgradeTextures(models.textures, renderer);
+    farLoad ??= loadFar();
   };
   // flyover.step(seconds) advances the simulation at 30 Hz and renders once (works in hidden tabs).
   const step = (seconds: number) => {
     const n = Math.max(1, Math.round(seconds * 30));
     for (let i = 0; i < n; i++) frame(1 / 30, i === n - 1);
   };
-  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, textures: models.textures, rig, scene, renderer, lighting, sky, water, wake, night, post, effects, quality, sound, jump, step }) });
+  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, textures: models.textures, rig, scene, renderer, lighting, sky, water, wake, night, post, effects, quality, sound, jump, step, far: () => far }) });
 
   // Dev only: ?record=timelapse (or beat<n>) records the run instead of playing it (src/record.ts).
   const recordMode = import.meta.env.DEV ? params.get("record") : null;
@@ -218,6 +238,7 @@ async function main(): Promise<void> {
     };
     // Recordings use the full-size textures from the start.
     await (upgrade ??= upgradeTextures(models.textures, renderer));
+    await (farLoad ??= loadFar());
     await record(recordMode, { step, jump, canvas, runLength: route.totalTime + LOOP.circle + LOOP.fadeOut, st, sights: world.sights, view });
     return;
   }
