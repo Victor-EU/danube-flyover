@@ -2,7 +2,8 @@
 // world's query layer from public/data/, at 60 Hz:
 // 1. the whole tour with no input, through the end circle and the loop: beats, mode switches,
 //    camera modes, cards, tracking error and floor contacts;
-// 2. scripted checks of pause, hand-back (with the mode rule) and the beat jumps;
+// 2. scripted checks of pause, hand-back (with the mode rule), the user's boat, boost and the
+//    beat jumps;
 // 3. the lighting the tour sees: the night ramp at the two money shots, the sky's blend;
 // 4. the heroes in the floor grid, every card's text and picture, the quality tiers and the
 //    tram lines;
@@ -12,7 +13,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { Color, Vector4 } from "three";
-import { LOOP } from "../src/config";
+import { BOAT, GLIDER, LOOP } from "../src/config";
 import { setPaused } from "../src/controller";
 import { Route, type RouteJson } from "../src/route";
 import { createSim, type Sim, stepSim } from "../src/sim";
@@ -58,12 +59,13 @@ function run(sim: Sim, seconds: number, each?: () => boolean | void): number {
   return seconds;
 }
 
-/** Holds the given input for `seconds`, then releases it. */
-function hold(sim: Sim, seconds: number, inp: { steer?: number; throttle?: number; climb?: number }, each?: () => void): void {
+/** Holds the given input for `seconds` (or until `each` returns true), then releases it. */
+function hold(sim: Sim, seconds: number, inp: { steer?: number; throttle?: number; climb?: number; boost?: boolean }, each?: () => boolean | void): number {
   const i = sim.st.input;
-  Object.assign(i, { steer: inp.steer ?? 0, throttle: inp.throttle ?? 0, climb: inp.climb ?? 0, active: true, everUsed: true });
-  run(sim, seconds, each);
-  Object.assign(i, { steer: 0, throttle: 0, climb: 0, active: false });
+  Object.assign(i, { steer: inp.steer ?? 0, throttle: inp.throttle ?? 0, climb: inp.climb ?? 0, boost: inp.boost ?? false, active: true, everUsed: true });
+  const t = run(sim, seconds, each);
+  Object.assign(i, { steer: 0, throttle: 0, climb: 0, boost: false, active: false });
+  return t;
 }
 
 // 1. The tour, hands off, through the loop.
@@ -83,6 +85,7 @@ console.log("\n— Tour, no input —");
   let blackAt = -1;
   const cardsShown: string[] = [];
   let looped = false;
+  let tookOff = false;
   let lastS = 0;
   // The clock at the two money shots: golden hour over Parliament, night under the Chain Bridge.
   const parliamentClock: number[] = [];
@@ -106,6 +109,7 @@ console.log("\n— Tour, no input —");
       console.log(`${mmss(st.t)}  beat: ${lastBeat}  (clock ${st.timeOfDay.toFixed(2)} h)`);
     }
     if (v.mode !== lastMode) {
+      if (v.mode === "TAKEOFF") tookOff = true;
       console.log(`${mmss(st.t)}  mode ${lastMode} -> ${v.mode} at y=${v.y.toFixed(1)} speed=${v.speed.toFixed(1)}`);
       lastMode = v.mode;
     }
@@ -142,6 +146,7 @@ console.log("\n— Tour, no input —");
   for (const [beat, c] of contacts) console.log(`  lifted in "${beat}": ${c.frames} frames, worst ${c.worst.toFixed(1)} m below the floor`);
   console.log(`cards: ${cardsShown.length} (${cardsShown.join(", ")})`);
   check(looped, "the tour loops back to the Japanese Garden");
+  check(tookOff, "hands off, the boat takes off where the route does");
   check(endAt > 0 && blackAt - endAt > 5.9 && blackAt - endAt < 6.2, `5 s end circle and 1 s fade (black ${(blackAt - endAt).toFixed(2)} s after the route ends)`);
   check(new Set(cardsShown).size === cardsShown.length, "each card shows once per pass");
   check(maxLateral < 25, "tracks the route within 25 m");
@@ -228,9 +233,10 @@ console.log("\n— Hand-back, glider over a boat stretch (beat 6) —");
   check(!st.camera.suspended, `camera keys resume at the next key (key ${st.camera.key}, ${st.camera.mode})`);
 }
 
-// 2d. Hand-back on a glider stretch: the user holds the boat back past the take-off point;
-//     on hand-back the autopilot takes off at once (clear of bridge decks).
-console.log("\n— Hand-back, boat over a glider stretch (beat 9) —");
+// 2d. Hand-back on a glider stretch: the user holds the boat back past the take-off point.
+//     It's their boat now: on hand-back the autopilot keeps it on the river and never takes
+//     off; holding E does.
+console.log("\n— Hand-back, the user's boat over a glider stretch (beat 9) —");
 {
   const sim = createSim(route, world);
   const { st } = sim;
@@ -240,14 +246,102 @@ console.log("\n— Hand-back, boat over a glider stretch (beat 9) —");
   hold(sim, 120, { throttle: -0.01 }, () => {
     if (st.autopilot.s > takeoffS + 40) st.input.throttle = 0.001;
   });
-  check(st.vehicle.mode === "BOAT" && st.autopilot.routeMode === "glider", `held as the boat past the take-off point (route mode ${st.autopilot.routeMode})`);
-  let tookOff = -1;
-  const t0 = st.t;
-  run(sim, 30, () => {
-    if (st.vehicle.mode === "TAKEOFF") tookOff = st.t - t0;
-    return tookOff > 0;
+  check(st.vehicle.mode === "BOAT" && st.autopilot.routeMode === "glider" && st.vehicle.userBoat, `held as the boat past the take-off point (route mode ${st.autopilot.routeMode})`);
+  let left = false;
+  let dry = 0;
+  let path = 0;
+  let px = st.vehicle.x;
+  let pz = st.vehicle.z;
+  run(sim, 90, () => {
+    const v = st.vehicle;
+    if (v.mode !== "BOAT") left = true;
+    if (!world.river.isWater(v.x, v.z)) dry++;
+    path += Math.hypot(v.x - px, v.z - pz);
+    px = v.x;
+    pz = v.z;
   });
-  check(tookOff > 0 && tookOff < 5.5, `takes off ${tookOff.toFixed(1)} s after release (3 s idle, then as soon as w < 0.5)`);
+  check(!left && st.control.w === 0, `stays the boat for 90 s under the autopilot (${st.vehicle.mode}, w ${st.control.w})`);
+  check(dry === 0 && path > 90 * BOAT.cruise * 0.8, `cruising the river: ${path.toFixed(0)} m, ${dry} frames off the water`);
+  check(st.autopilot.phase === "tour", "no end circle for the user's boat");
+  const up = hold(sim, 3, { climb: 1 }, () => st.vehicle.mode === "TAKEOFF");
+  check(st.vehicle.mode === "TAKEOFF" && Math.abs(up - 1) < 0.05, `holding E takes off after ${up.toFixed(2)} s`);
+  run(sim, 4);
+  check(st.vehicle.mode === "GLIDER" && !st.vehicle.userBoat, `and flies on as the glider (${st.vehicle.mode})`);
+}
+
+// 2f. A manual landing on a glider stretch: the boat is the user's from touchdown, and stays a
+//     boat for good under the autopilot, going down the river, back at the world's edge, and
+//     past the bridge piers without sticking.
+console.log("\n— Manual landing on a glider stretch (beat 3), then hands off —");
+{
+  const sim = createSim(route, world);
+  const { st } = sim;
+  sim.tour.jumpNow(st, 3);
+  run(sim, 2);
+  const landed = hold(sim, 40, { climb: -1 }, () => st.vehicle.mode === "LANDING");
+  check(st.vehicle.mode === "LANDING" && st.vehicle.userBoat, `Q held lands on the water after ${landed.toFixed(1)} s (route mode ${st.autopilot.routeMode})`);
+  let left = false;
+  let dry = 0;
+  let turns = 0;
+  let worst = Infinity;
+  let dir = 0;
+  let px = st.vehicle.x;
+  let pz = st.vehicle.z;
+  let path = 0;
+  for (let minute = 0; minute < 15; minute++) {
+    let step = 0;
+    run(sim, 60, () => {
+      const v = st.vehicle;
+      if (v.mode !== "BOAT" && v.mode !== "LANDING") left = true;
+      if (!world.river.isWater(v.x, v.z)) dry++;
+      step += Math.hypot(v.x - px, v.z - pz);
+      px = v.x;
+      pz = v.z;
+      if (st.autopilot.riverDir !== 0 && st.autopilot.riverDir !== dir) {
+        if (dir !== 0) turns++;
+        dir = st.autopilot.riverDir;
+      }
+    });
+    worst = Math.min(worst, step);
+    path += step;
+  }
+  check(!left, `stays the boat for 15 minutes hands off (${st.vehicle.mode})`);
+  check(dry === 0, `on the water throughout (${dry} frames off it)`);
+  check(worst > 60 * BOAT.cruise * 0.6, `never stuck: at least ${worst.toFixed(0)} m every minute, ${(path / 1000).toFixed(1)} km in all`);
+  check(turns >= 1, `turns back at the world's edge (${turns} times)`);
+}
+
+// 2g. Boost: the glider and the boat run on to their boost speeds and ease back after; boosting
+//     the boat (even with W) never takes it up.
+console.log("\n— Boost —");
+{
+  const sim = createSim(route, world);
+  const { st } = sim;
+  sim.tour.jumpNow(st, 3);
+  run(sim, 2);
+  let top = 0;
+  hold(sim, 6, { boost: true }, () => {
+    top = Math.max(top, st.vehicle.speed);
+  });
+  check(top > GLIDER.boostSpeed - 1 && st.vehicle.speed <= GLIDER.boostSpeed, `glider boosts to ${top.toFixed(1)} m/s`);
+  run(sim, 8);
+  check(st.vehicle.speed <= GLIDER.maxSpeed + 0.01, `and eases back to ${st.vehicle.speed.toFixed(1)} m/s within 8 s`);
+
+  sim.tour.jumpNow(st, 7);
+  run(sim, 1);
+  top = 0;
+  hold(sim, 8, { boost: true, throttle: 1 }, () => {
+    top = Math.max(top, st.vehicle.speed);
+  });
+  check(top > BOAT.boostSpeed - 1 && st.vehicle.mode === "BOAT", `boat boosts to ${top.toFixed(1)} m/s with W held, still the boat`);
+  // The bar's toggle, as Input.update reads it.
+  st.ui.boost = true;
+  Object.assign(st.input, { boost: true, active: true });
+  run(sim, 10);
+  check(st.control.w === 1 && st.vehicle.speed > BOAT.boostSpeed - 1 && world.river.isWater(st.vehicle.x, st.vehicle.z), `boost toggled on: the user's, at ${st.vehicle.speed.toFixed(1)} m/s, on the water`);
+  sim.tour.jumpNow(st, 5);
+  check(!st.ui.boost, "a jump turns the boost toggle off");
+  Object.assign(st.input, { boost: false, active: false });
 }
 
 // 2e. Beat jumps fade through black and land on the beat start in the route's mode.

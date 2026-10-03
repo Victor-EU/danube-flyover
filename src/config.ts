@@ -7,6 +7,9 @@ export const GLIDER = {
   maxSpeed: 25,
   cruise: 15,
   accel: 5,
+  /** Boosting (Shift, B or the bar's button): the top speed, and the acceleration toward it. */
+  boostSpeed: 75,
+  boostAccel: 18,
   maxYawRate: deg(55),
   maxClimb: 10,
   maxDive: 16,
@@ -24,9 +27,19 @@ export const BOAT = {
   maxSpeed: 12,
   cruise: 8,
   accel: 3,
+  boostSpeed: 36,
+  boostAccel: 10,
   maxYawRate: deg(30),
   /** Distance kept from the river banks. */
   bankMargin: 5,
+};
+
+/** Boost is for getting around, not physics: well past either vehicle's own top speed. */
+export const BOOST = {
+  /** Above its own top speed without boost, a vehicle slows at this share of its boost acceleration. */
+  ease: 0.5,
+  /** The view widens by up to this much (degrees) at boost speed. */
+  fov: 9,
 };
 
 export const CONTROL = {
@@ -35,6 +48,9 @@ export const CONTROL = {
   blendOut: 2,
   /** Arc-length window searched by `nearest()` while the user is (partly) in control. */
   manualWindow: 300,
+  /** The user's boat, cruising the river under the autopilot: the bank clearance it keeps, and how far from the world's edge it turns back. */
+  riverClearance: 45,
+  riverTurn: 120,
 };
 
 export const TRANSITION = {
@@ -42,7 +58,7 @@ export const TRANSITION = {
   takeoff: 2.5,
   /** Manual landing starts below this altitude over water while descending. */
   landingAltitude: 2,
-  /** Throttle must be held at max boat speed this long to take off. */
+  /** Take-off is asked for (E, or the throttle at the boat's own top speed) for this long. */
   takeoffHold: 1,
   takeoffAltitude: 25,
   /** Take-off never starts under a deck or this close before one. */

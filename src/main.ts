@@ -125,6 +125,7 @@ async function main(): Promise<void> {
     ...digits,
     Space: () => setPaused(st, !st.paused),
     Escape: () => st.cards.id && sim.cards.dismiss(st),
+    KeyB: () => (st.ui.boost = !st.ui.boost),
     KeyT: () => (st.ui.sliderVisible = !st.ui.sliderVisible),
     Backquote: () => (st.ui.debug = !st.ui.debug),
     KeyM: () => sound.toggle(),

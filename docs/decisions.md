@@ -2,6 +2,37 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-03 — The boat stays a boat, and a boost
+
+**The boat stays a boat until the user takes it up.**
+
+- Before, a boat the user had landed (or steered past the route's take-off point) took off again 3 s after they let go. The hand-back mode rule had the autopilot run any transition the route asked for, and most of the route is glider.
+- Now a boat is the user's once they've landed or steered it (`VehicleState.userBoat`). Pausing alone doesn't claim it. The autopilot never takes off from the user's boat. Only the user does, and take-off clears the flag. A jump or the loop clears it too.
+- On hand-back, the user's boat follows the route along its boat legs, the same as before.
+- Elsewhere it cruises the river the way it's heading: it follows the centreline's flow direction 40 m ahead, keeps the aim point 45 m off the banks, and runs at cruise speed. It turns back once its aim point gets within 120 m of the world's edge, and only when that point is nearer the edge than the boat. The first version flipped direction every frame near the edge.
+- The tour's progress (`s`) is searched in the wide manual window while the boat is off the route, and the end circle never starts for the user's boat.
+- Hands off, the tour is unchanged: the boat nobody touched still takes off past Liberty Bridge for the Market Hall circle and the loop.
+- The glider's half of the rule stays: a glider over a boat stretch flies back and lands.
+
+**Take-off has its own key:** hold E (up) for 1 s. W at the boat's own top speed still works, and so does a drag up on touch screens. W doesn't count while boosting, so Shift+W never lifts the boat by accident.
+
+**Boost**, for getting around rather than for physics:
+
+- Hold Shift, or toggle it with B or the bar's new » button (for touch and mouse).
+- The glider runs on to 75 m/s at 18 m/s², and the boat to 36 m/s at 10 m/s², three times their own top speeds.
+- Without boost, a vehicle above its own top speed slows at half its boost acceleration, so the glider is back to 25 m/s about 5 s after release.
+- Boost counts as input. While it's on, the autopilot waits and the badge says "You". A jump turns the toggle off.
+- The view widens by up to 9° as the speed rises past the vehicle's own top.
+- The corridor, altitude floor, banks and piers work as they did; at 75 m/s the floor's 2 s lookahead reaches 150 m.
+
+**Checks:**
+
+- `npm run simulate` replaces "takes off 4 s after release" with the new rule. Released past the take-off point, the user's boat stays a boat for 90 s, cruises 697 m on the water, starts no end circle, and E takes it up in 1.00 s.
+- New: a manual landing at Parliament, then 15 minutes hands off. It stays a boat on the water, covers at least 480 m every minute (7.2 km in all), and turns back once at the edge.
+- New: boost takes the glider to 75 m/s and back under 25 m/s within 8 s. The boat reaches 36 m/s with Shift+W and is still a boat. The toggle keeps control with the user, and a jump turns it off.
+- The hands-off tour still takes off with the route.
+- In the browser, the real key events do the same, and the bar holds together at 375 px.
+
 ## 2026-10-03 — The far buildings, built as the world's are
 
 The far field read as a different city. Beyond the world's tiled and slated roofs stood pale, flat-roofed boxes with drawn-on windows, so the edge showed from every high view. Now the far buildings go through the world's own pipeline and wear its surfaces; at the edge the two are hard to tell apart.

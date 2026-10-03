@@ -37,7 +37,7 @@ export function stepSim(sim: Sim, dt: number): void {
   const { st, route, world } = sim;
   st.dt = dt;
   st.t += dt;
-  updateAutopilot(st, route, dt);
+  updateAutopilot(st, route, world, dt);
   updateController(st, world, dt);
   updateVehicle(st, world, route, dt);
   sim.rig.update(st, dt);

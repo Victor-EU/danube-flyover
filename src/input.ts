@@ -1,7 +1,8 @@
 // Keyboard, mouse drag and touch drag, normalised into steer / throttle / climb in [-1, 1].
-// W/S speed, A/D steer, Q/E altitude (Q descends). Arrow keys mirror W/A/S/D. A drag steers
-// sideways; up and down it climbs (glider) or sets the speed (boat). One-shot keys
-// (Space, digits, T, Esc, `) go to the hotkey table; Space is always pause, never a button press.
+// W/S speed, A/D steer, Q/E altitude (Q descends; as the boat, E held takes off), Shift held
+// boosts. Arrow keys mirror W/A/S/D. A drag steers sideways; up and down it climbs (glider) or
+// sets the speed (boat). The bar's boost button (or B) toggles boost. One-shot keys (Space,
+// digits, B, T, Esc, `) go to the hotkey table; Space is always pause, never a button press.
 
 import type { State } from "./state";
 
@@ -71,7 +72,8 @@ export class Input {
     st.input.steer = clamp1(steer);
     st.input.throttle = clamp1(drive);
     st.input.climb = clamp1(climb);
-    st.input.active = st.input.steer !== 0 || st.input.throttle !== 0 || st.input.climb !== 0;
+    st.input.boost = k("ShiftLeft", "ShiftRight") === 1 || st.ui.boost;
+    st.input.active = st.input.steer !== 0 || st.input.throttle !== 0 || st.input.climb !== 0 || st.input.boost;
     if (st.input.active) st.input.everUsed = true;
   }
 }
@@ -79,4 +81,5 @@ export class Input {
 const GAME_KEYS = new Set([
   "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+  "ShiftLeft", "ShiftRight",
 ]);

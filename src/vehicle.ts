@@ -1,8 +1,9 @@
 // Integrates the glider or boat from the blended command, plays the scripted landing and
 // take-off curves, and applies the constraints: corridor, world edge, ceiling, altitude
-// floor and bridge decks for the glider; river polygon and piers for the boat.
+// floor and bridge decks for the glider; river polygon and piers for the boat. Boosting lifts
+// the top speed to the boost speed; past its own top speed without boost, a vehicle eases back.
 
-import { GLIDER, BOAT, TRANSITION, WORLD } from "./config";
+import { GLIDER, BOAT, BOOST, TRANSITION, WORLD } from "./config";
 import { forwardOf, headingOf, wrapAngle, type XZ } from "./geo";
 import type { Route, RouteSample } from "./route";
 import type { State, VehicleState } from "./state";
@@ -15,6 +16,13 @@ const smoothstep = (a: number, b: number, x: number) => {
 };
 const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 const routePt: RouteSample = { x: 0, y: 0, z: 0, heading: 0, speed: 0, mode: "glider" };
+
+/** `next` within [min, top]: the top is the boost speed while boosting; above the vehicle's own, it slows toward it. */
+function limitSpeed(prev: number, next: number, min: number, spec: typeof GLIDER | typeof BOAT, boost: boolean, dt: number): number {
+  const top = boost ? spec.boostSpeed : spec.maxSpeed;
+  if (next <= top) return Math.max(min, next);
+  return Math.max(top, Math.min(next, prev - spec.boostAccel * BOOST.ease * dt));
+}
 
 export function updateVehicle(st: State, world: World, route: Route, dt: number): void {
   const v = st.vehicle;
@@ -36,14 +44,14 @@ export function updateVehicle(st: State, world: World, route: Route, dt: number)
   switch (v.mode) {
     case "GLIDER":
       v.yawRate = cmd.yawRate;
-      v.speed = clamp(v.speed + cmd.accel * dt, GLIDER.minSpeed, GLIDER.maxSpeed);
+      v.speed = limitSpeed(v.speed, v.speed + cmd.accel * dt, GLIDER.minSpeed, GLIDER, st.control.boost, dt);
       v.y += cmd.climb * dt;
       break;
     case "BOAT": {
       v.yawRate = cmd.yawRate;
       // Paused, the boat idles down to a stop; afterwards it eases back up to its minimum.
       const min = st.paused ? 0 : Math.min(BOAT.minSpeed, v.speed + BOAT.accel * dt);
-      v.speed = clamp(v.speed + cmd.accel * dt, min, BOAT.maxSpeed);
+      v.speed = limitSpeed(v.speed, v.speed + cmd.accel * dt, min, BOAT, st.control.boost, dt);
       v.y = 0;
       break;
     }

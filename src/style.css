@@ -88,7 +88,8 @@ body {
 }
 
 #play,
-#sound {
+#sound,
+#boost {
   display: grid;
   place-items: center;
   width: 30px;
@@ -104,8 +105,26 @@ body {
 #play:hover,
 #play:focus-visible,
 #sound:hover,
-#sound:focus-visible {
+#sound:focus-visible,
+#boost:hover,
+#boost:focus-visible {
   border-color: var(--bar-fg);
+}
+
+/* Boost: muted while off, the accent while it's in force (toggled, or Shift held). */
+#boost {
+  color: var(--muted);
+}
+
+#boost svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+#boost[data-on="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 #play svg {

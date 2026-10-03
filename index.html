@@ -11,7 +11,7 @@
     <div id="loading">Building Budapest…</div>
     <div id="fatal" hidden></div>
     <div id="fade"></div>
-    <div id="hint"><span class="keys">Steer to take control: W/S speed · A/D turn · Q/E down/up · or drag<br />Space pauses · 1–9 and 0 jump to a stop on the tour · M for music</span><span class="touch">Drag to take control: sideways to turn, up and down to climb or dive (as the boat, to speed up)<br />Let go and the autopilot takes back over</span></div>
+    <div id="hint"><span class="keys">Steer to take control: W/S speed · A/D turn · Q/E down/up (E takes the boat up) · Shift boost · or drag<br />Space pauses · 1–9 and 0 jump to a stop on the tour · M for music</span><span class="touch">Drag to take control: sideways to turn, up and down to climb or dive (as the boat, to speed up) · » boosts<br />Let go and the autopilot takes back over</span></div>
     <pre id="debug" hidden></pre>
     <aside id="card" aria-live="polite" aria-label="Landmark">
       <button id="card-open" type="button" aria-expanded="false" aria-controls="card-more">
@@ -32,6 +32,9 @@
       <button id="sound" type="button" aria-pressed="false" aria-label="Music" title="Music on (M)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path class="speaker" d="M2 6.1h2.4L7.9 3v10L4.4 9.9H2z" /><path class="waves" d="M10.2 5.7a3.2 3.2 0 0 1 0 4.6M12.1 3.8a5.8 5.8 0 0 1 0 8.4" /><path class="mute" d="M10.4 6.2l3.6 3.6M14 6.2l-3.6 3.6" /></svg>
       </button>
+      <button id="boost" type="button" aria-pressed="false" aria-label="Boost" title="Boost (B, or hold Shift)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 3.4a.5.5 0 0 1 .8-.4l5.2 4.6a.5.5 0 0 1 0 .8L3 13a.5.5 0 0 1-.8-.4zM8.2 3.4a.5.5 0 0 1 .8-.4l5.2 4.6a.5.5 0 0 1 0 .8L9 13a.5.5 0 0 1-.8-.4z" /></svg>
+      </button>
       <span id="mode" class="badge" data-mode="glider">Glider</span>
       <span id="pilot" class="badge">Autopilot</span>
       <label id="time" title="Time of day (T to hide)">
@@ -47,7 +50,8 @@
       <h3>Controls</h3>
       <ul>
         <li>The autopilot flies the tour. Steer to take over: W/S speed, A/D turn, Q/E down and up (as the glider), or drag. After 3 s without input, the autopilot takes back over.</li>
-        <li>Land: hold Q over the water. Take off: hold W at the boat's top speed.</li>
+        <li>Land: hold Q over the water. Once you've landed or steered the boat, it stays a boat, the autopilot keeping it to the river, until you take off: hold E (or W at the boat's top speed, or drag up).</li>
+        <li>Boost: hold Shift, or press B or the » button in the bar to keep it on, for three times the speed. It's yours while it's on: the autopilot waits.</li>
         <li>Space pauses the tour and leaves you in control. 1–9 and 0 jump to the ten stops. T hides the time slider.</li>
         <li>Landmark cards: click one to open it, Esc to close it.</li>
         <li>The music is off until you turn it on: the speaker button in the bar, or M.</li>

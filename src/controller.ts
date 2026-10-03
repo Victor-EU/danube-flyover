@@ -1,7 +1,9 @@
 // The only module that knows about both the autopilot and the user. It blends their commands
 // by the weight `w` and owns the mode state machine: GLIDER → LANDING → BOAT → TAKEOFF → GLIDER.
 // Pause hands the vehicle to the user and keeps it there: the boat idles and the glider, which
-// can't hover, circles at minimum speed until the user steers.
+// can't hover, circles at minimum speed until the user steers. A boat the user has steered or
+// landed stays a boat until they take it up; the autopilot only takes off its own.
+// Boost (held or toggled) runs either vehicle on toward its boost speed.
 
 import { GLIDER, BOAT, CONTROL, PAUSE, TRANSITION } from "./config";
 import { forwardOf } from "./geo";
@@ -29,15 +31,20 @@ export function updateController(st: State, world: World, dt: number): void {
 
   const transitioning = v.mode === "LANDING" || v.mode === "TAKEOFF";
   const boat = v.mode === "BOAT";
-  const maxYaw = boat ? BOAT.maxYawRate : GLIDER.maxYawRate;
+  const spec = boat ? BOAT : GLIDER;
+  const maxYaw = spec.maxYawRate;
   // Inputs are ignored during a transition.
+  c.boost = inp.boost && !transitioning;
   let mYaw = transitioning ? 0 : inp.steer * maxYaw;
-  let mAccel = transitioning ? 0 : inp.throttle * (boat ? BOAT.accel : GLIDER.accel);
+  // Boosting runs on toward the boost speed, unless braking.
+  let mAccel = transitioning ? 0 : c.boost ? (inp.throttle < 0 ? -1 : 1) * spec.boostAccel : inp.throttle * spec.accel;
   const mClimb = transitioning || boat ? 0 : inp.climb * (inp.climb < 0 ? GLIDER.maxDive : GLIDER.maxClimb);
+  // Steering the boat (or the landing) makes it the user's.
+  if ((boat || v.mode === "LANDING") && inp.active) v.userBoat = true;
   if (st.paused && !transitioning) {
     // Idle without input: slow to the minimum (a stop, for the boat); the glider keeps
     // circling the way it was already turning.
-    if (inp.throttle === 0) mAccel = -(boat ? BOAT.accel : GLIDER.accel);
+    if (inp.throttle === 0 && !c.boost) mAccel = -spec.accel;
     if (inp.steer === 0 && !boat) mYaw = (Math.sign(v.yawRate) || 1) * Math.min(maxYaw, v.speed / PAUSE.gliderRadius);
   }
   const a = ap.command;
@@ -55,13 +62,16 @@ export function updateController(st: State, world: World, dt: number): void {
       // that has flown back onto a boat stretch.
       const autoLanding = autopilotDriving && ap.routeMode === "boat" && overWater && v.lateral < 40;
       if (manualLanding || autoLanding) start(st, "LANDING");
+      if (manualLanding) v.userBoat = true;
       break;
     }
     case "BOAT": {
-      const atMax = inp.throttle > 0.5 && v.speed >= BOAT.maxSpeed - 0.05;
-      v.throttleHeld = atMax ? v.throttleHeld + dt : 0;
-      const manualTakeoff = v.throttleHeld >= TRANSITION.takeoffHold;
-      const autoTakeoff = autopilotDriving && ap.routeMode === "glider";
+      // Up (E) held, or the throttle held at the boat's own top speed (not boosting), takes off.
+      const asked = inp.climb > 0.5 || (inp.throttle > 0.5 && !c.boost && v.speed >= BOAT.maxSpeed - 0.05);
+      v.takeoffHeld = asked ? v.takeoffHeld + dt : 0;
+      const manualTakeoff = v.takeoffHeld >= TRANSITION.takeoffHold;
+      // The autopilot takes off where the route does, but never from the user's boat.
+      const autoTakeoff = autopilotDriving && ap.routeMode === "glider" && !v.userBoat;
       if ((manualTakeoff || autoTakeoff) && takeoffAllowed(st, world)) start(st, "TAKEOFF");
       break;
     }
@@ -89,7 +99,8 @@ function start(st: State, mode: Mode): void {
   v.transitionT = 0;
   v.transitionFrom.speed = v.speed;
   v.transitionFrom.y = v.y;
-  v.throttleHeld = 0;
+  v.takeoffHeld = 0;
+  if (mode === "TAKEOFF") v.userBoat = false;
 }
 
 function setMode(st: State, mode: Mode): void {

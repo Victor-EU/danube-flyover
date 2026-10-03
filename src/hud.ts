@@ -1,4 +1,4 @@
-// The thin bottom bar (play/pause, music, mode and pilot badges, time slider, sunset-run toggle,
+// The thin bottom bar (play/pause, music, boost, mode and pilot badges, time slider, sunset-run toggle,
 // the OSM credit that opens the About overlay), the landmark card, the fade to black, the
 // fading "take control" hint, and a debug panel toggled with the ` key.
 
@@ -22,6 +22,7 @@ export class Hud {
   private readonly clock = $<HTMLSpanElement>("clock");
   private readonly sunset = $<HTMLInputElement>("sunset");
   private readonly play = $<HTMLButtonElement>("play");
+  private readonly boost = $<HTMLButtonElement>("boost");
   private readonly mode = $<HTMLSpanElement>("mode");
   private readonly pilot = $<HTMLSpanElement>("pilot");
   private readonly hint = $<HTMLDivElement>("hint");
@@ -56,6 +57,7 @@ export class Hud {
     });
     this.sunset.addEventListener("change", () => (st.sunsetRun.enabled = this.sunset.checked));
     this.play.addEventListener("click", () => setPaused(st, !st.paused));
+    this.boost.addEventListener("click", () => (st.ui.boost = !st.ui.boost));
     const about = $<HTMLDialogElement>("about");
     $<HTMLButtonElement>("credit").addEventListener("click", () => about.showModal());
     // Clicking the card opens it to the illustration and paragraph; an open card stays until closed.
@@ -126,6 +128,8 @@ export class Hud {
       this.play.setAttribute("aria-label", st.paused ? "Resume the tour" : "Pause the tour");
       this.play.title = st.paused ? "Resume (Space)" : "Pause (Space)";
     }
+    this.boost.setAttribute("aria-pressed", String(st.ui.boost));
+    this.boost.dataset.on = String(st.control.boost);
     this.hint.classList.toggle("gone", st.input.everUsed);
     this.updateCard(st);
 
@@ -178,9 +182,9 @@ export class Hud {
     const world = this.sim.world;
     return [
       `fps        ${this.fps}`,
-      `mode       ${v.mode}${v.mode === "LANDING" || v.mode === "TAKEOFF" ? ` ${v.transitionT.toFixed(2)} s` : ""}${st.paused ? "  (paused)" : ""}`,
+      `mode       ${v.mode}${v.mode === "LANDING" || v.mode === "TAKEOFF" ? ` ${v.transitionT.toFixed(2)} s` : ""}${v.userBoat ? "  (the user's boat)" : ""}${st.paused ? "  (paused)" : ""}`,
       `control w  ${st.control.w.toFixed(2)}  (idle ${st.control.idleFor.toFixed(1)} s)`,
-      `speed      ${v.speed.toFixed(1)} m/s`,
+      `speed      ${v.speed.toFixed(1)} m/s${st.control.boost ? "  (boost)" : ""}${v.takeoffHeld > 0 ? `  take-off ${v.takeoffHeld.toFixed(1)} s` : ""}`,
       `altitude   ${v.y.toFixed(1)} m   floor ${world.floor.gliderMin(v.x, v.z).toFixed(1)} m`,
       `lateral    ${v.lateral.toFixed(0)} m from route`,
       `route      ${(ap.s / 1000).toFixed(2)} / ${(r.length / 1000).toFixed(2)} km  (${ap.routeMode})${ap.phase === "end" ? `  end circle ${ap.endT.toFixed(1)} s` : ""}`,

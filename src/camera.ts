@@ -7,7 +7,7 @@
 // ignored while the user has control, until the next key is reached.
 
 import { PerspectiveCamera, Vector3 } from "three";
-import { CAMERA, TRANSITION } from "./config";
+import { BOAT, BOOST, CAMERA, GLIDER, TRANSITION } from "./config";
 import { forwardOf, headingOf, wrapAngle } from "./geo";
 import type { Route } from "./route";
 import type { CameraMode, State } from "./state";
@@ -82,6 +82,8 @@ export class CameraRig {
   private blendT = Infinity;
   private suspendedKey = -1;
   private sinceDeck = Infinity;
+  /** 0 → 1 with the speed past the vehicle's own top (boosting), smoothed, for the field of view. */
+  private rush = 0;
   private readonly from = newPose();
   private readonly to = newPose();
   private readonly out = newPose();
@@ -176,7 +178,10 @@ export class CameraRig {
       if (deck && v.y < deck.underside) c.y = Math.min(c.y, deck.underside - 0.6);
     }
     camera.lookAt(tmpL);
-    const fov = portraitFov(p.fov, camera.aspect);
+    // Past the vehicle's own top speed (boosting), the view widens a little.
+    const spec = b > 0.5 ? BOAT : GLIDER;
+    this.rush += (clamp((v.speed - spec.maxSpeed) / (spec.boostSpeed - spec.maxSpeed), 0, 1) - this.rush) * Math.min(1, dt * 3);
+    const fov = portraitFov(p.fov + BOOST.fov * this.rush, camera.aspect);
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = fov;
       camera.updateProjectionMatrix();

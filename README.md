@@ -40,7 +40,7 @@ npm run dev        # http://localhost:5173
 npm run build      # static site in dist/, deployable to any static host
 npm run timetable  # beat start times computed from public/data/route.json
 npm run simulate   # headless runs: the tour through the loop (beats, camera, cards, tracking, floor contacts),
-                   # scripted checks of pause, hand-back and the jumps, the lighting at the money shots,
+                   # scripted checks of pause, hand-back, the user's boat, boost and the jumps, the lighting at the money shots,
                    # the heroes, cards, quality tiers and tram lines, the music's licences and playlist,
                    # and the download budgets
 npm run textures   # repaint the (procedural) texture set and its sheet, and pack public/data/tex/
@@ -58,10 +58,11 @@ To record the run, open the dev server with `?record=timelapse` (the whole tour 
   - W/S: speed
   - A/D: turn
   - Q/E: down/up (glider)
+  - Shift: boost, three times the top speed (B, or the bar's » button, keeps it on)
   - or drag (touch or mouse): sideways turns; up and down climbs or dives as the glider, and sets the speed as the boat
-- **Hand-back:** 3 s without input hands control back to the autopilot over 2 s. If the route has changed mode meanwhile, the autopilot takes off, or flies back and lands, first.
+- **Hand-back:** 3 s without input hands control back to the autopilot over 2 s. A glider over a boat stretch of the route flies back and lands first. A boat stays a boat: once you've landed or steered it, the autopilot keeps it to the river (along the route's boat legs, otherwise the way it's heading) and only you take it up. Boost left on keeps control with you.
 - **Land:** hold Q over the water until you're below 2 m.
-- **Take off:** hold W (or drag up) at the boat's top speed for 1 s.
+- **Take off:** hold E for 1 s, or W (or drag up) at the boat's own top speed for 1 s.
 - **Space** (or the bar's button) pauses: you keep control, the boat idles and the glider circles. Resuming hands back to the autopilot.
 - **1–9 and 0** jump to the ten beats.
 - **Cards:** click one to open it, and **Esc** or × to close it.
