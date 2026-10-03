@@ -14,7 +14,8 @@ export interface GridHeader {
   cell: number;
   nx: number;
   nz: number;
-  layers: { name: string; type: LayerType; scale?: number; offset?: number }[];
+  /** `channels` values per sample, interleaved (1 if absent). */
+  layers: { name: string; type: LayerType; scale?: number; offset?: number; channels?: number }[];
   [extra: string]: unknown;
 }
 
@@ -53,8 +54,8 @@ export function decodeGrid(file: ArrayBuffer | Uint8Array): Grid {
   const header = JSON.parse(new TextDecoder().decode(raw.subarray(8, 8 + headLen))) as GridHeader;
   const layers: Record<string, Arr> = {};
   let at = 8 + ((headLen + 3) & ~3);
-  const count = header.nx * header.nz;
   for (const l of header.layers) {
+    const count = header.nx * header.nz * (l.channels ?? 1);
     const C = CTOR[l.type];
     // Copy into an aligned buffer: the decompressed bytes start at an arbitrary offset.
     const bytes = raw.slice(at, at + count * C.BYTES_PER_ELEMENT);

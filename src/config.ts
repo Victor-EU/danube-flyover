@@ -63,12 +63,12 @@ export const WORLD = {
 
 export const CAMERA = {
   glider: { back: 12, up: 4, fov: 70 },
-  boat: { back: 6, up: 1.5, fov: 60 },
+  boat: { back: 7.5, up: 2, fov: 60 },
   smoothTime: 0.4,
   /** Changes between camera modes blend over this long. */
   blend: 1.5,
   /** `low`, under bridge decks: just above the vehicle. */
-  low: { glider: { back: 8.5, up: 1.2 }, boat: { back: 4.5, up: 0.7 } },
+  low: { glider: { back: 8.5, up: 1.2 }, boat: { back: 6.5, up: 1.5 } },
   /** `reveal` starts this far behind and above, and catches up by the next camera key. */
   reveal: { back: 55, up: 22 },
   /**
@@ -115,6 +115,13 @@ export const TEXTURES = {
   bays: 4,
   facades: ["pestEclectic", "pestClassic", "secession", "budaBaroque", "castle", "modern", "panel", "villa"],
   roofs: ["roofTile", "roofSlate", "roofCopper", "roofFlat"],
+  /** After the roofs in the surface array: the blank firewalls' and trim's render. */
+  plaster: "plaster",
+  /** Metres covered by one plaster tile. */
+  plasterTile: 6,
+  /** The ground's surfaces (their own array), and the metres one tile of each covers. */
+  ground: ["asphalt", "paving", "sett", "grass", "gravel"],
+  groundTile: [4, 3, 2, 6, 4],
   /** Metres covered by one roof and one quay tile. */
   roofTile: 8,
   quayTile: 4,
@@ -142,9 +149,36 @@ export const QUALITY = {
   samples: 4,
   /** Share of the trees drawn. */
   trees: 1,
+  /** Share of the parked and moving cars drawn (0: none). */
+  cars: 1,
   anisotropy: 8,
   /** Ambient life: tour boats, trams, gulls. */
   life: true,
+  /** Wave simulation cells a side, a power of 2 (WAKE.cell metres each); 0: the plain foam trail. */
+  wake: 512,
+};
+
+/**
+ * The boat's wake (src/world/wake.ts): linear deep-water waves simulated on the GPU in a
+ * square that follows the boat on a leash and drifts with the current. The hulls press on
+ * the water; everything else (the V, its feathered crests, the waves running on after the
+ * boat turns or stops, other boats' wakes crossing it) comes out of the waves themselves.
+ */
+export const WAKE = {
+  /** Metres per cell. */
+  cell: 0.5,
+  /** Absorbing band at the square's edges, as a share of its size. */
+  sponge: 0.08,
+  /** The boat may stray this share of the size from the centre before the square follows. */
+  leash: 0.27,
+  /** The current, m/s downstream (the water normal maps' flow). */
+  current: 0.6,
+  /** Horizontal displacement toward the crests (sharper crests, flatter troughs). */
+  chop: 0.55,
+  /** Seconds the waves keep running after the boat leaves the water (for the view from the air). */
+  linger: 90,
+  /** Scales every hull's pressure: 1 is the linear theory's wake for the hull's weight. */
+  gain: 1,
 };
 
 /**
@@ -174,3 +208,24 @@ export type HeroLayer = (typeof HERO_LAYERS)[number]["name"];
 export const HERO_LAYER = Object.fromEntries(HERO_LAYERS.map((l, i) => [l.name, i])) as Record<HeroLayer, number>;
 /** Hero texture coordinates are stored as tiles / HERO_UV_RANGE + 0.5, so they quantise into [0, 1]. */
 export const HERO_UV_RANGE = 128;
+
+/**
+ * The tree species (tools/build-trees.ts grows them, tools/build-city.ts plants them, and
+ * build-floor clears their crowns): height and crown radius in metres at scale 1, and the
+ * share of leaves turned in early October.
+ */
+export const TREE_SPECIES = [
+  { name: "plane", height: 24, radius: 8.5, turned: 0.45 },
+  { name: "chestnut", height: 17, radius: 7, turned: 0.7 },
+  { name: "linden", height: 19, radius: 6.5, turned: 0.65 },
+  { name: "maple", height: 15, radius: 6, turned: 0.8 },
+  { name: "poplar", height: 26, radius: 6.5, turned: 0.5 },
+  { name: "willow", height: 14, radius: 7, turned: 0.25 },
+  { name: "oak", height: 18, radius: 7.5, turned: 0.35 },
+  { name: "robinia", height: 15, radius: 5.5, turned: 0.4 },
+  { name: "pine", height: 16, radius: 4.5, turned: 0 },
+] as const;
+export type TreeSpecies = (typeof TREE_SPECIES)[number]["name"];
+export const TREE_SPECIES_INDEX = Object.fromEntries(TREE_SPECIES.map((s, i) => [s.name, i])) as Record<TreeSpecies, number>;
+/** Shape variants grown per species. */
+export const TREE_VARIANTS = 3;

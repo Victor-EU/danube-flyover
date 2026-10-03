@@ -1,9 +1,14 @@
-// Effects and ambient life: the boat's wake and foam, the splash ring and spray when the glider
-// lands and the burst when the boat takes off, flocks of gulls over the river, two tour boats
-// on loops up and down it, and the trams along both embankments (life.json). Everything is
-// created once; per frame only positions, counts and fades change, so nothing recompiles.
+// Effects and ambient life: the hulls and splashes that make the wake's waves (src/world/wake.ts),
+// the boat's bow spray and stern mist, the spray when the glider lands and the burst when the
+// boat takes off, flocks of gulls over the river, two tour boats on loops up and down it, and
+// the trams along both embankments (life.json). Without the wave simulation (the low tier) a
+// foam trail, a splash ring and foam V's behind the tour boats stand in for the waves.
+// Everything is created once; per frame only positions, counts and fades change, so nothing
+// recompiles.
 
 import {
+  type Material,
+  type Texture,
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
@@ -26,14 +31,21 @@ import {
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { forwardOf, headingOf } from "./geo";
+import { QUALITY } from "./config";
+import { RIVA } from "./riva";
+import { craftMaterials, cruiseShip, pontoon, sightseeingBoat } from "./ships";
 import type { State } from "./state";
 import type { River } from "./world/river";
 import { SHARED } from "./world/night";
 import { HASH_GLSL, patchMaterial } from "./world/shaderPatch";
+import type { WakeHull, WakeSplash } from "./world/wake";
 import { LAYER } from "./world/water";
 
 export interface LifeJson {
   trams: { name: string; path: number[] }[];
+  /** Flat [x, z, heading, length, ...]: the landing pontoons (water on their right) and the moored ships. */
+  pontoons?: number[];
+  ships?: number[];
 }
 
 const tmpM = new Matrix4();
@@ -42,18 +54,29 @@ const tmpE = new Euler();
 const tmpP = new Vector3();
 const tmpS = new Vector3();
 
+/** What the effects need of the wake: whether it simulates, and where. */
+export interface WakeView {
+  readonly supported: boolean;
+  covers(x: number, z: number): boolean;
+}
+
 export class Effects {
   readonly group = new Group();
-  private readonly wake = new Wake();
+  private readonly trail = new FoamTrail();
   private readonly spray = new Spray();
   private readonly gulls = new Gulls();
   private readonly boats: TourBoats;
   private readonly trams: Trams;
+  /** The moored cruise ships and the pontoons: always shown, part of the riverfront. */
+  readonly moored: Group;
+  private readonly hullList: WakeHull[] = [];
 
-  constructor(river: River, life: LifeJson) {
-    this.boats = new TourBoats(river);
+  constructor(river: River, life: LifeJson, env: Texture) {
+    const mats = craftMaterials(env);
+    this.boats = new TourBoats(river, mats);
     this.trams = new Trams(life);
-    this.group.add(this.wake.mesh, this.spray.points, this.spray.ring, this.gulls.mesh, this.boats.group, this.trams.group);
+    this.moored = mooredCraft(life, mats);
+    this.group.add(this.trail.mesh, this.spray.points, this.spray.mist.points, this.spray.ring, this.gulls.mesh, this.boats.group, this.trams.group, this.moored);
     this.group.name = "effects";
   }
 
@@ -67,23 +90,63 @@ export class Effects {
   }
 
   /** `light`: how bright the scene is (0 at night, 1 in daylight), for the unlit spray. */
-  update(st: State, dt: number, light: number): void {
-    this.wake.update(st);
-    this.spray.update(st, dt, light);
+  update(st: State, dt: number, light: number, wake: WakeView | null): void {
+    const waves = !!wake?.supported && QUALITY.wake > 0;
+    this.trail.update(st);
+    this.trail.mesh.visible &&= !waves;
+    this.spray.update(st, dt, light, waves);
     if (!this.life) return;
     this.gulls.update(st.t, SHARED.uNight.value);
-    this.boats.update(dt, SHARED.uNight.value);
+    this.boats.update(dt, SHARED.uNight.value, waves ? wake : null);
     this.trams.update(dt, SHARED.uNight.value);
+  }
+
+  /** Everything pressing on the water this frame for the wake: the runabout first, then the tour boats. */
+  hulls(st: State): WakeHull[] {
+    const out = this.hullList;
+    out.length = 0;
+    const v = st.vehicle;
+    if (v.boatness > 0.5 && v.y < 0.6) {
+      // Planing, the bow lifts clear and the hull runs on its after part.
+      const plane = smoothstep(4, 10, v.speed);
+      out.push({
+        id: "runabout",
+        x: v.x,
+        z: v.z,
+        heading: v.heading,
+        front: 3 - 2.1 * plane,
+        back: -RIVA.stern + 0.1,
+        halfBeam: 0.92,
+        // An Aquarama-class runabout's 2.5 t.
+        volume: 2.5 * Math.min(1, (v.boatness - 0.5) * 2),
+        wash: 3.5 * Math.min(1, Math.max(0, (v.speed - 1) / 7)),
+        spray: 3 * smoothstep(6, 11, v.speed),
+        bow: 1.4 * smoothstep(2, 6, v.speed) * (1 - 0.6 * plane),
+        planing: plane,
+      });
+    }
+    if (this.life) this.boats.hulls(out);
+    return out;
+  }
+
+  /** The craters made since the last call (landings, take-offs). */
+  takeSplashes(): WakeSplash[] {
+    return this.spray.splashes.splice(0);
   }
 
   /** For the debug panel. */
   describe(): string {
-    if (!this.life) return `wake ${this.wake.count}, spray ${this.spray.alive}, no ambient life`;
-    return `wake ${this.wake.count}, spray ${this.spray.alive}, gulls ${this.gulls.count}, boats ${this.boats.count}, trams ${this.trams.count}`;
+    if (!this.life) return `trail ${this.trail.count}, spray ${this.spray.alive}, no ambient life`;
+    return `trail ${this.trail.count}, spray ${this.spray.alive}, gulls ${this.gulls.count}, boats ${this.boats.count}, trams ${this.trams.count}`;
   }
 }
 
-// --- The boat's wake ------------------------------------------------------------------------
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+// --- The foam trail (without the wave simulation) ---------------------------------------------
 
 /** GLSL: foam broken into patches that drift and churn. */
 const FOAM_GLSL = /* glsl */ `
@@ -120,7 +183,7 @@ function foamMaterial(): MeshStandardMaterial {
 const WAKE_POINTS = 64;
 const WAKE_STEP = 1.6; // metres between history points
 
-class Wake {
+class FoamTrail {
   readonly mesh: Mesh;
   private readonly pos: Float32Array;
   private readonly col: Float32Array;
@@ -150,15 +213,15 @@ class Wake {
     this.mesh.frustumCulled = false;
     this.mesh.layers.set(LAYER.water);
     this.mesh.renderOrder = 1;
-    this.mesh.name = "wake";
+    this.mesh.name = "foam trail";
   }
 
   update(st: State): void {
     const v = st.vehicle;
     const f = forwardOf(v.heading);
     const onWater = v.boatness > 0.5 && v.y < 0.6;
-    const sx = v.x - f.x * 2.2;
-    const sz = v.z - f.z * 2.2;
+    const sx = v.x - f.x * RIVA.stern;
+    const sz = v.z - f.z * RIVA.stern;
     const last = this.hist[0];
     if (onWater && (!last || Math.hypot(sx - last.x, sz - last.z) >= WAKE_STEP)) {
       this.hist.unshift({ x: sx, z: sz, t: st.t });
@@ -189,8 +252,8 @@ class Wake {
       const alive = i < pts.length ? 1 : 0;
       const fade = alive * Math.max(0, 1 - age / 14) * Math.max(0, 1 - d / 100);
       // The trail: churned foam widening behind the stern.
-      const w = 0.75 + d * 0.035;
-      this.strip(0, i, p.x, p.z, nx, nz, 0, w, fade * fade * 0.85 * Math.max(speedK, 0.3));
+      const w = 0.45 + d * 0.04;
+      this.strip(0, i, p.x, p.z, nx, nz, 0, w, fade * fade * 0.6 * Math.max(speedK, 0.3));
       // The arms: spreading at about 19° either side, thinner and fainter.
       const spread = 0.8 + d * 0.34;
       const aw = 0.3 + d * 0.008;
@@ -213,8 +276,6 @@ class Wake {
 
 // --- Splash and spray ---------------------------------------------------------------------
 
-const SPRAY_MAX = 220;
-
 function dropTexture(): CanvasTexture {
   const c = document.createElement("canvas");
   c.width = c.height = 32;
@@ -228,34 +289,104 @@ function dropTexture(): CanvasTexture {
   return new CanvasTexture(c);
 }
 
-class Spray {
+/** Droplets under gravity, `size` metres across, until they fall back into the water. */
+class Particles {
   readonly points: Points;
-  readonly ring: Mesh;
-  private readonly pos = new Float32Array(SPRAY_MAX * 3);
-  private readonly col = new Float32Array(SPRAY_MAX * 4);
-  private readonly vel = new Float32Array(SPRAY_MAX * 3);
-  private readonly life = new Float32Array(SPRAY_MAX);
-  private readonly age = new Float32Array(SPRAY_MAX).fill(Infinity);
+  private readonly pos: Float32Array;
+  private readonly col: Float32Array;
+  private readonly vel: Float32Array;
+  private readonly life: Float32Array;
+  private readonly age: Float32Array;
   private next = 0;
+  alive = 0;
+
+  constructor(
+    private readonly max: number,
+    size: number,
+    map: CanvasTexture,
+    private readonly opacity: number,
+  ) {
+    this.pos = new Float32Array(max * 3);
+    this.col = new Float32Array(max * 4);
+    this.vel = new Float32Array(max * 3);
+    this.life = new Float32Array(max);
+    this.age = new Float32Array(max).fill(Infinity);
+    const g = new BufferGeometry();
+    g.setAttribute("position", new BufferAttribute(this.pos, 3).setUsage(DynamicDrawUsage));
+    g.setAttribute("color", new BufferAttribute(this.col, 4).setUsage(DynamicDrawUsage));
+    const mat = new PointsMaterial({ size, map, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true });
+    this.points = new Points(g, mat);
+    this.points.frustumCulled = false;
+  }
+
+  emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number): void {
+    const i = this.next;
+    this.next = (this.next + 1) % this.max;
+    this.pos.set([x, y, z], i * 3);
+    this.vel.set([vx, vy, vz], i * 3);
+    this.life[i] = life;
+    this.age[i] = 0;
+  }
+
+  update(dt: number, light: number): void {
+    let alive = 0;
+    const c = 0.35 + 0.65 * light;
+    for (let i = 0; i < this.max; i++) {
+      if (this.age[i] >= this.life[i]) {
+        this.col[i * 4 + 3] = 0;
+        continue;
+      }
+      alive++;
+      this.age[i] += dt;
+      this.vel[i * 3 + 1] -= 9.8 * dt;
+      // Air drag slows the finest spray.
+      const drag = Math.exp(-0.8 * dt);
+      for (let k = 0; k < 3; k++) this.pos[i * 3 + k] += (this.vel[i * 3 + k] *= k === 1 ? 1 : drag) * dt;
+      if (this.pos[i * 3 + 1] < 0) this.age[i] = this.life[i];
+      const t = this.age[i] / this.life[i];
+      this.col.set([c, c, c, (1 - t) * this.opacity], i * 4);
+    }
+    this.alive = alive;
+    this.points.visible = alive > 0;
+    if (alive > 0) {
+      this.points.geometry.attributes.position.needsUpdate = true;
+      this.points.geometry.attributes.color.needsUpdate = true;
+    }
+  }
+}
+
+class Spray {
+  /** The landing's splash and the take-off's burst. */
+  readonly points: Points;
+  private readonly burst: Particles;
+  /** The runabout's spray sheets off the bow and the mist off its transom, while it runs. */
+  readonly mist: Particles;
+  /** Without the waves: a foam ring spreading from a splash. */
+  readonly ring: Mesh;
+  /** Craters for the wake to ring out (taken by Effects.takeSplashes). */
+  readonly splashes: WakeSplash[] = [];
   private lastMode = "GLIDER";
   private lastT = 0;
   private ringAge = Infinity;
   private seed = 1;
-  alive = 0;
+  private owed = 0;
 
   constructor() {
-    const g = new BufferGeometry();
-    g.setAttribute("position", new BufferAttribute(this.pos, 3).setUsage(DynamicDrawUsage));
-    g.setAttribute("color", new BufferAttribute(this.col, 4).setUsage(DynamicDrawUsage));
-    const mat = new PointsMaterial({ size: 0.55, map: dropTexture(), vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true });
-    this.points = new Points(g, mat);
-    this.points.frustumCulled = false;
+    const map = dropTexture();
+    this.burst = new Particles(220, 0.55, map, 0.9);
+    this.points = this.burst.points;
     this.points.name = "spray";
+    this.mist = new Particles(900, 0.09, map, 0.3);
+    this.mist.points.name = "bow spray";
     const rm = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.9, transparent: true, depthWrite: false, opacity: 0, side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
     this.ring = new Mesh(new RingGeometry(0.75, 1, 48, 1).rotateX(-Math.PI / 2), rm);
     this.ring.layers.set(LAYER.water);
     this.ring.visible = false;
     this.ring.name = "splash ring";
+  }
+
+  get alive(): number {
+    return this.burst.alive + this.mist.alive;
   }
 
   private rand(): number {
@@ -265,18 +396,14 @@ class Spray {
 
   private emit(n: number, x: number, z: number, fx: number, fz: number, up: [number, number], out: [number, number], back: number): void {
     for (let k = 0; k < n; k++) {
-      const i = this.next;
-      this.next = (this.next + 1) % SPRAY_MAX;
       const a = this.rand() * Math.PI * 2;
       const o = out[0] + this.rand() * (out[1] - out[0]);
-      this.pos.set([x + Math.cos(a) * 0.8, 0.2, z + Math.sin(a) * 0.8], i * 3);
-      this.vel.set([Math.cos(a) * o - fx * back, up[0] + this.rand() * (up[1] - up[0]), Math.sin(a) * o - fz * back], i * 3);
-      this.life[i] = 0.8 + this.rand() * 0.7;
-      this.age[i] = 0;
+      this.burst.emit(x + Math.cos(a) * 0.8, 0.2, z + Math.sin(a) * 0.8, Math.cos(a) * o - fx * back, up[0] + this.rand() * (up[1] - up[0]), Math.sin(a) * o - fz * back, 0.8 + this.rand() * 0.7);
     }
   }
 
-  update(st: State, dt: number, light: number): void {
+  /** `waves`: the wake simulates the water (the splash ring stays hidden). */
+  update(st: State, dt: number, light: number, waves: boolean): void {
     const v = st.vehicle;
     const f = forwardOf(v.heading);
     // The landing splash at 0.6 s, the take-off spray at 0.3 s (the design's transition specs).
@@ -285,39 +412,45 @@ class Spray {
       this.emit(120, v.x, v.z, f.x, f.z, [2, 6.5], [1.5, 5], -2);
       this.ringAge = 0;
       this.ring.position.set(v.x, 0.06, v.z);
+      this.splashes.push({ x: v.x, z: v.z, radius: 2.2, depth: 0.55 });
     }
     if (crossed("TAKEOFF", 0.3)) {
       this.emit(90, v.x - f.x * 2, v.z - f.z * 2, f.x, f.z, [1.5, 4.5], [0.5, 2.5], 5);
       this.ringAge = 0.4;
       this.ring.position.set(v.x - f.x * 2, 0.06, v.z - f.z * 2);
+      this.splashes.push({ x: v.x - f.x * 2, z: v.z - f.z * 2, radius: 1.6, depth: 0.35 });
     }
     this.lastMode = v.mode;
     this.lastT = v.transitionT;
 
-    let alive = 0;
-    for (let i = 0; i < SPRAY_MAX; i++) {
-      if (this.age[i] >= this.life[i]) {
-        this.col[i * 4 + 3] = 0;
-        continue;
+    // Under way: sheets of spray peel off both sides of the bow and fly out and aft, and a fine
+    // mist hangs over the wash behind the transom.
+    if (v.mode === "BOAT" && v.speed > 4) {
+      const rx = -f.z;
+      const rz = f.x;
+      const sheet = smoothstep(5, 11, v.speed);
+      const mist = 25 * smoothstep(7, 12, v.speed);
+      this.owed += (420 * sheet + mist) * dt;
+      for (; this.owed >= 1; this.owed--) {
+        if (this.rand() * (420 * sheet + mist) < 420 * sheet) {
+          const side = this.rand() < 0.5 ? -1 : 1;
+          const a = 1.2 + this.rand() * 1.3;
+          const out = 2 + this.rand() * 2.8;
+          const fwd = v.speed * (0.45 + this.rand() * 0.2);
+          this.mist.emit(v.x + f.x * a + rx * side * 0.95, 0.12, v.z + f.z * a + rz * side * 0.95, f.x * fwd + rx * side * out, 0.9 + this.rand() * 1.9, f.z * fwd + rz * side * out, 0.45 + this.rand() * 0.45);
+        } else {
+          const across = (this.rand() - 0.5) * 1.6;
+          const fwd = v.speed * (0.7 + this.rand() * 0.2);
+          this.mist.emit(v.x - f.x * (RIVA.stern + 0.3) + rx * across, 0.1, v.z - f.z * (RIVA.stern + 0.3) + rz * across, f.x * fwd + rx * across, 0.4 + this.rand() * 0.9, f.z * fwd + rz * across, 0.3 + this.rand() * 0.3);
+        }
       }
-      alive++;
-      this.age[i] += dt;
-      this.vel[i * 3 + 1] -= 9.8 * dt;
-      for (let k = 0; k < 3; k++) this.pos[i * 3 + k] += this.vel[i * 3 + k] * dt;
-      if (this.pos[i * 3 + 1] < 0) this.age[i] = this.life[i];
-      const t = this.age[i] / this.life[i];
-      const c = 0.35 + 0.65 * light;
-      this.col.set([c, c, c, (1 - t) * 0.9], i * 4);
-    }
-    this.alive = alive;
-    this.points.visible = alive > 0;
-    if (alive > 0) {
-      this.points.geometry.attributes.position.needsUpdate = true;
-      this.points.geometry.attributes.color.needsUpdate = true;
-    }
+    } else this.owed = 0;
+
+    this.burst.update(dt, light);
+    this.mist.update(dt, light);
     this.ringAge += dt;
     const rt = this.ringAge / 2.2;
-    this.ring.visible = rt < 1;
+    this.ring.visible = rt < 1 && !waves;
     if (this.ring.visible) {
       const r = 1.5 + 8 * Math.sqrt(rt);
       this.ring.scale.set(r, 1, r);
@@ -450,13 +583,17 @@ class TourBoats {
   private readonly hull: InstancedMesh;
   private readonly glass: InstancedMesh;
   private readonly wakes: InstancedMesh;
-  private readonly glassMat: MeshStandardMaterial;
   private readonly path: Path;
   private readonly s: number[];
-  private readonly scales = [1, 0.62];
+  private readonly scales = [1, 0.85];
+  private readonly speeds = [4.5, 5.5];
+  /** Where each boat is (x, z, heading), for the wake. */
+  private readonly at: { x: number; z: number; heading: number }[] = [];
+  /** Each foam V's opacity: it fades while the wake simulates that boat's water. */
+  private readonly fade: InstancedBufferAttribute;
   count = 0;
 
-  constructor(river: River) {
+  constructor(river: River, mats: { body: Material; glass: MeshStandardMaterial }) {
     // A loop down the east side of the river and back up the west, from below Margaret
     // Bridge to above Liberty Bridge, kept 30 m off the banks.
     const c = river.centreline;
@@ -485,25 +622,9 @@ class TourBoats {
     this.path = new Path([...down, ...up], true);
     this.s = [0, this.path.len * 0.5];
 
-    const hull = blocks([
-      [6, 1.6, 30, 0, 0.5, 0, "#f1efe9"],
-      [6.1, 0.35, 30.1, 0, 0.9, 0, "#2c5d86"],
-      [5.4, 0.25, 26, 0, 3.75, 1.5, "#d8d5cc"],
-      [3.2, 0.25, 4, 0, 5.3, -8, "#d8d5cc"],
-      [5.6, 0.6, 3, 0, 1.6, -15.6, "#f1efe9"],
-    ]);
-    // Taper the bow.
-    const p = hull.attributes.position as BufferAttribute;
-    for (let i = 0; i < p.count; i++) if (p.getZ(i) < -12 && p.getY(i) < 2.2) p.setX(i, p.getX(i) * (0.35 + 0.65 * Math.max(0, (p.getZ(i) + 17) / 5)));
-    hull.computeVertexNormals();
-    const glass = blocks([
-      [5.3, 1.9, 25.5, 0, 2.7, 1.5, "#ffffff"],
-      [3.0, 1.3, 3.8, 0, 4.55, -8, "#ffffff"],
-    ]);
-    const hullMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.6, flatShading: true });
-    this.glassMat = new MeshStandardMaterial({ color: "#3d4a55", roughness: 0.25, emissive: "#ffcf8f", emissiveIntensity: 0 });
-    this.hull = new InstancedMesh(hull, hullMat, 2);
-    this.glass = new InstancedMesh(glass, this.glassMat, 2);
+    const craft = sightseeingBoat();
+    this.hull = new InstancedMesh(craft.body, mats.body, 2);
+    this.glass = new InstancedMesh(craft.glass, mats.glass, 2);
     // A foam V behind each boat.
     const wg = new BufferGeometry();
     const wp = [0, 0.05, 15, -12, 0.05, 70, -9, 0.05, 72, 0, 0.05, 15, 9, 0.05, 72, 12, 0.05, 70, -2.5, 0.05, 15, 2.5, 0.05, 15, 0, 0.05, 48];
@@ -513,8 +634,17 @@ class TourBoats {
     wg.computeVertexNormals();
     const nor = wg.attributes.normal as BufferAttribute;
     for (let i = 0; i < nor.count; i++) nor.setXYZ(i, 0, 1, 0);
+    this.fade = new InstancedBufferAttribute(new Float32Array([1, 1]), 1).setUsage(DynamicDrawUsage);
+    wg.setAttribute("aFade", this.fade);
     const wm = foamMaterial();
     wm.side = DoubleSide;
+    patchMaterial(wm, {
+      key: "fade",
+      vertexPars: "attribute float aFade;\nvarying float vFade;",
+      vertex: [["begin_vertex", "vFade = aFade;"]],
+      fragmentPars: "varying float vFade;",
+      fragment: [["color_fragment", "diffuseColor.a *= vFade;"]],
+    });
     this.wakes = new InstancedMesh(wg, wm, 2);
     this.wakes.layers.set(LAYER.water);
     this.wakes.renderOrder = 1;
@@ -527,12 +657,16 @@ class TourBoats {
     this.group.add(this.hull, this.glass, this.wakes);
   }
 
-  update(dt: number, night: number): void {
-    this.glassMat.emissiveIntensity = night * 1.6;
+  /** `wake`, when it simulates the water: a boat's foam V gives way to its waves there. */
+  update(dt: number, _night: number, wake: WakeView | null): void {
     this.count = this.s.length;
     this.s.forEach((s, i) => {
-      this.s[i] = s + dt * (i === 0 ? 4.5 : 5.5);
+      this.s[i] = s + dt * this.speeds[i];
       const h = this.path.at(this.s[i], tmpP);
+      this.at[i] = { x: tmpP.x, z: tmpP.z, heading: h };
+      const covered = !!wake && wake.covers(tmpP.x, tmpP.z);
+      const a = this.fade.getX(i);
+      this.fade.setX(i, covered ? Math.max(0, a - dt / 5) : Math.min(1, a + dt / 2));
       tmpE.set(0, -h, 0, "YXZ");
       tmpQ.setFromEuler(tmpE);
       tmpS.setScalar(this.scales[i]);
@@ -542,7 +676,44 @@ class TourBoats {
       this.wakes.setMatrixAt(i, tmpM);
     });
     for (const m of [this.hull, this.glass, this.wakes]) m.instanceMatrix.needsUpdate = true;
+    this.fade.needsUpdate = true;
   }
+
+  /** The boats' hulls for the wake: 32 m displacement hulls drawing 0.8 m, the second one smaller. */
+  hulls(out: WakeHull[]): void {
+    this.at.forEach((b, i) => {
+      const k = this.scales[i];
+      out.push({ id: `tour ${i}`, ...b, front: 15 * k, back: -15 * k, halfBeam: 3 * k, volume: 100 * k * k * k, wash: 1.6, spray: 0, bow: 1.1, planing: 0 });
+    });
+  }
+}
+
+// --- Moored ships and pontoons ---------------------------------------------------------------
+
+/** The cruise ships moored along the quays and the landing pontoons, merged into two meshes. */
+function mooredCraft(life: LifeJson, mats: { body: Material; glass: MeshStandardMaterial }): Group {
+  const group = new Group();
+  group.name = "moored craft";
+  const bodies: BufferGeometry[] = [];
+  const glass: BufferGeometry[] = [];
+  const place = (craft: { body: BufferGeometry; glass: BufferGeometry }, x: number, z: number, heading: number) => {
+    tmpQ.setFromEuler(tmpE.set(0, -heading, 0, "YXZ"));
+    tmpM.compose(tmpP.set(x, 0, z), tmpQ, tmpS.set(1, 1, 1));
+    bodies.push(craft.body.clone().applyMatrix4(tmpM));
+    glass.push(craft.glass.clone().applyMatrix4(tmpM));
+  };
+  const ships = life.ships ?? [];
+  for (let k = 0; k < ships.length; k += 4) place(cruiseShip(ships[k + 3]), ships[k], ships[k + 1], ships[k + 2]);
+  const pontoons = life.pontoons ?? [];
+  for (let k = 0; k < pontoons.length; k += 4) place(pontoon(pontoons[k + 3], 4), pontoons[k], pontoons[k + 1], pontoons[k + 2]);
+  if (!bodies.length) return group;
+  const body = new Mesh(mergeGeometries(bodies)!, mats.body);
+  const panes = new Mesh(mergeGeometries(glass)!, mats.glass);
+  for (const m of [body, panes]) {
+    m.castShadow = m.receiveShadow = true;
+    group.add(m);
+  }
+  return group;
 }
 
 // --- Trams ----------------------------------------------------------------------------------

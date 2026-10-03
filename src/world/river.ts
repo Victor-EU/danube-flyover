@@ -144,6 +144,26 @@ export class River {
     return xs.sort((a, b) => a - b);
   }
 
+  /** The flow's direction (a unit vector downstream) at the centreline segment nearest (x, z). */
+  flowAt(x: number, z: number): XZ {
+    const c = this.centreline;
+    let best = Infinity;
+    let out: XZ = { x: 0, z: 1 };
+    for (let i = 0; i + 3 < c.length; i += 2) {
+      const ex = c[i + 2] - c[i];
+      const ez = c[i + 3] - c[i + 1];
+      const l2 = ex * ex + ez * ez || 1;
+      const u = Math.min(1, Math.max(0, ((x - c[i]) * ex + (z - c[i + 1]) * ez) / l2));
+      const d2 = (c[i] + ex * u - x) ** 2 + (c[i + 1] + ez * u - z) ** 2;
+      if (d2 < best) {
+        best = d2;
+        const l = Math.sqrt(l2);
+        out = { x: ex / l, z: ez / l };
+      }
+    }
+    return out;
+  }
+
   /** Where the water crosses the line z, outermost banks only (for the backdrop frame). */
   edgeGap(z: number): XZ[] {
     const xs = this.waterSpans(z);

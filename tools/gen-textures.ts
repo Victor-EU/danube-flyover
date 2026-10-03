@@ -6,13 +6,14 @@
 //   hero_<layer>_day.png / _lit.png     1024², the hero landmarks' layers (HERO_LAYERS)
 //   water_normal.png                    512² tileable normal map
 //   sky_<dawn|day|golden|night>.png     4096 × 2048 equirectangular panoramas
-// and docs/style-sheet.webp, the locked style reference (every texture on one sheet).
+// and docs/style-sheet.webp, the set at a glance (a riverside street by day and by night).
 //
-// The default is procedural: deterministic, offline, no licence questions. The design's image
-// API path (prompts in tools/prompts/, the style sheet attached to every request) replaces the
-// facades, roofs, quay and hero layers with --api; --dry lists its requests and their cost
-// first. See tools/textures/api.ts and tools/lib/imageApi.ts.
-// Usage: npm run gen-textures [-- --api [--dry] [--force]] [-- --only <name>]
+// The default is procedural: deterministic, offline, no licence questions. The image API path
+// (prompts in tools/prompts/: photographs of the real materials) replaces the facades, roofs,
+// quay, plaster, ground and hero layers with --api; --dry lists its requests and their cost
+// first, --parallel n sends n textures' requests at a time. See tools/textures/api.ts and
+// tools/lib/imageApi.ts.
+// Usage: npm run gen-textures [-- --api [--dry] [--force] [--parallel n]] [-- --only <name>]
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import sharp, { type OverlayOptions } from "sharp";
@@ -40,7 +41,8 @@ const save = async (name: string, png: Buffer) => {
 
 if (process.argv.includes("--api")) {
   const api = imageClient();
-  written.push(...(await generateWithApi(api, RAW, want)));
+  const parallel = process.argv.includes("--parallel") ? Number(process.argv[process.argv.indexOf("--parallel") + 1]) : 1;
+  written.push(...(await generateWithApi(api, RAW, want, parallel)));
   api.summary();
 } else {
   for (const style of TEXTURES.facades)
@@ -58,6 +60,21 @@ if (process.argv.includes("--api")) {
       if (want(name)) await save(name, await rasterise(heroSvg(l.name, mode)));
     }
   if (want("quay_stone.png")) await save("quay_stone.png", await rasterise(quaySvg()));
+  // Plaster and the ground's surfaces: plain noise in their colours (the API set photographs them).
+  const noisy = async (name: string, base: [number, number, number], amp: number, scale: number) => {
+    const n = 512;
+    const rgb = Buffer.alloc(n * n * 3);
+    const v = (x: number, y: number) => {
+      let a = 0;
+      for (let o = 0, f = scale, w = 0.5; o < 4; o++, f *= 2, w /= 2) a += w * Math.sin(x * f * 0.0123 + Math.sin(y * f * 0.0091 + o) * 2.1 + o * 1.7) * Math.cos(y * f * 0.0117 - o);
+      return a;
+    };
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) for (let c = 0; c < 3; c++) rgb[(y * n + x) * 3 + c] = Math.max(0, Math.min(255, base[c] * (1 + amp * v(x, y))));
+    await save(name, await sharp(rgb, { raw: { width: n, height: n, channels: 3 } }).png().toBuffer());
+  };
+  if (want(`${TEXTURES.plaster}.png`)) await noisy(`${TEXTURES.plaster}.png`, [236, 233, 226], 0.06, 1);
+  const GROUND: Record<string, [number, number, number]> = { asphalt: [62, 63, 65], paving: [150, 148, 142], sett: [118, 112, 104], grass: [86, 104, 46], gravel: [150, 134, 108] };
+  for (const g of TEXTURES.ground) if (want(`ground_${g}.png`)) await noisy(`ground_${g}.png`, GROUND[g], 0.18, 3);
   if (want("water_normal.png")) {
     const n = 512;
     await save("water_normal.png", await sharp(Buffer.from(waterNormals(n)), { raw: { width: n, height: n, channels: 3 } }).png().toBuffer());

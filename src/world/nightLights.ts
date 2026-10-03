@@ -74,7 +74,7 @@ interface Anchor {
 
 const POOL = 3; // plus the boat's lamp
 /** On a short mast ahead of the cabin (local -z is forward), lighting the deck and the water. */
-const BOAT_LAMP = { intensity: 2.5, distance: 30, offset: new Vector3(0, 2.8, -1.4) };
+const BOAT_LAMP = { intensity: 2.5, distance: 30, offset: new Vector3(0, 2.6, 0.4) };
 
 export class NightLights {
   readonly group = new Group();
@@ -251,7 +251,7 @@ export class NightLights {
     // Inside the planar reflection's zones the reflection shows the lights itself.
     this.streakMat.uniforms.uStrength.value = 1 - 0.55 * mirror;
 
-    // The boat's lamp rides on the cabin roof.
+    // The boat's lamp hangs above the cockpit.
     const v = st.vehicle;
     const f = forwardOf(v.heading);
     const o = BOAT_LAMP.offset;

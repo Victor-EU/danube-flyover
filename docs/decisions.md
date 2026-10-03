@@ -2,6 +2,149 @@
 
 Changes to the design doc and departures from it, with the reason. Newest first.
 
+## 2026-10-03 — The wake, simulated
+
+The wake was three foam ribbons on a flat river: no waves, nothing when the boat turned or stopped. Now the water around the boat is simulated, and everything a wake does comes out of the waves themselves.
+
+**The waves: linear deep-water theory on the GPU** (`src/world/wake.ts`, `src/world/fft.ts`)
+
+- **The square:** 512 × 512 cells of 0.5 m (256 m), following the boat on a leash: it moves, by whole cells, only when the boat strays 69 m from its centre. So after a turn, the boat runs back over its old wake.
+- **Each frame:**
+  - In space, the hulls press on the water, and splashes punch craters. A band at the square's edges absorbs what leaves it, and the land, the piers and the moored craft take what reaches them.
+  - An FFT turns it into waves, and each wave advances by its own phase, ω = √(g|k|). That dispersion is what makes a moving hull's waves into a Kelvin wake.
+  - The inverse FFT also gives the horizontal displacement that sharpens crests and flattens troughs.
+- **The FFT:** Stockham radix-8 passes, one output per fragment, so a 512² transform is six passes. The whole step costs about 0.7 ms on the M3.
+- **Why not a cheaper sim:** iWave's truncated kernel, or a plain wave equation, gets dispersion wrong for the 10–90 m waves that make the V, which then comes out the wrong shape.
+- **What comes out without being asked for:**
+  - At 11 m/s the runabout's V is about 12° either side, narrower than Kelvin's 19.5°, as a planing hull's is.
+  - The slow tour boats make the textbook pattern: transverse waves plus feathered divergent ones.
+  - Turns leave curved wakes; waves run on after the boat stops; wakes cross each other.
+  - Behind the transom there's a hollow, then a hump 10 m back.
+- **The current:** the square lives in the water's frame, drifting 0.6 m/s downstream, so the waves, the foam and (inside the square) the ripples all drift together.
+
+**The hulls**
+
+- **The runabout:** an Aquarama-class 2.5 t. Afloat, its pressure follows the draft. Planing, it's a planing plate's: peaked at the spray root, nothing at the transom, highest along the keel, on the aft 3.4 m.
+- **Getting the hole right:** a broad, smooth pressure dug a hole deeper than the hull draws (the boat hovered over it). The plate's profile makes 20–25 cm crests for a 30 cm depression.
+- **The wash boils:** the water behind the transom heaves at random, which fills the V with short waves.
+- **The tour boats** are 32 m hulls drawing 0.8 m. Every hull eases in over 2.5 s as it enters the square, so nothing starts with a ring.
+
+**The surface**
+
+- **A displaced patch:** rings around the camera, from 12 cm out to 100 m, are moved by the waves (mip-sampled by ring spacing). Inside the runabout's waterline the water stays under its V bottom.
+- **The river:** it gives way to the patch inside the square and reads the same slopes and foam. Across the square's absorbing edge its own ripples crossfade, keeping their strength, so there's no seam.
+- **Foam:**
+  - Sources: the hull's wash, the spray sheets beside it and its bow wave; crests folding or steeper than 0.42; waves meeting the quays.
+  - It spreads, and ages from white water (2.5 s) into lace (25 s).
+  - It's drawn from a texture painted once on the GPU: froth pocked with bubbles, and marbled lace filaments. Where foam is thin only the brightest filaments show; far off, the average. A Voronoi lace looked like cracked ice.
+  - Churned water glows pale jade underneath, and its ripples are smoothed: the glassy scar.
+- **The planar reflection** breaks up over the waves, and foam doesn't mirror.
+- **Spray:** sheets of fine droplets peel off the bow at speed, and a mist hangs over the wash.
+
+**The boat rides the waves**
+
+- **A probe:** five heights under the hull are read back asynchronously, a few frames late. Their high-passed mean, fore-and-aft slope and athwartships slope move the boat through a damped spring. The high pass keeps its own trim out.
+- **Crossing its own wake** in a tight turn, the boat heaves 9 cm and pitches a few degrees.
+
+**Tiers:** high runs 512² and medium 256² (128 m). Low, and any browser without float render targets, keep the old foam trail, splash ring and foam V's. A tour boat's foam V fades out while the square simulates its water.
+
+## 2026-10-03 — The realism pass
+
+After using it, the brief changed: the boat was too simple, the city looked like a Lego build, and the aim is now a Budapest close to reality, whatever the download. A second $20 for the image API came with it (a $28.46 cap in all), and the 25 MB budget went.
+
+**The approach: our own city, not Google's**
+
+- Google's Photorealistic 3D Tiles would be the closest to reality, but they need a billing API key at runtime, Google's attribution on screen, and no caching. Their daylight is baked in, so golden hour and night would be colour grading only.
+- So the self-contained route was taken: no runtime map API, full time of day. It's built from the same open data, made far richer.
+
+**The boat: a 1960s mahogany runabout** (`src/riva.ts`)
+
+- **The hull:** 7 m, lofted from 48 stations: a V bottom, a chine and flared topsides under a rising sheer, with tumblehome and a raked, curved transom.
+- **The wood:** a cambered varnished deck with pale caulking seams, mahogany planking with its grain, painted on canvases at load. The varnish is a clearcoat that reflects the sky.
+- **The fittings:** pleated cream leather benches with turquoise piping, a dashboard with gauges, a wheel, and a chrome-framed curved windscreen. Also chrome rubbing strakes, cleats, a boarding ladder and twin exhausts, a sun pad over the engine hatch, navigation lights, and the Hungarian flag streaming from a staff.
+- **The camera** sits further back to frame it: 7.5 m behind and 2 m up, and 6.5 m and 1.5 m under the bridges.
+
+**Roofs from straight skeletons** (`tools/lib/roofs.ts`)
+
+- **Blocks:** buildings that touch are merged into blocks, and each block's straight skeleton gives the roof planes. That's CGAL's, through the `straight-skeleton` package's WebAssembly build, which takes 32-bit floats, so each outline goes in about its own corner.
+- **Why blocks:** a roof runs on across the party walls and slopes only to the street and the courtyards, as Budapest's do.
+- **Profiles:**
+  - pitched, at 34–43° with the cap at 4.2–5.8 m, chosen per block so neighbours share a roofline; deep wings get a flat top;
+  - mansard, from `roof:levels` or `roof:shape`;
+  - steep, for churches;
+  - flat, for modern buildings and anything over 34 m.
+- **Robustness:** outlines are cleaned of near-duplicate and collinear points and checked for self-crossings first. CGAL asserts on a bad ring and leaves its module broken. A merged outline that fails falls back to each building's own skeleton.
+- **Speed:** CGAL's exact construction takes 10–20 ms for a few dozen corners, so the skeletons run in worker threads on every core: 11 s for 7,446 blocks, against 85–170 s on one.
+- **Eaves:** buildings stand to their eaves, where OSM's `height` is to the top. Untagged ones get 15–21 m (five or six storeys), and small untagged footprints (kiosks, pavilions) 3.5–11 m.
+
+**The rest of the city's geometry**
+
+- **Firewalls:** where a party wall rises above its neighbour, it's a blank firewall, carried up to the roof's section.
+- **Cornices and parapets:** cornices with a soffit and fascia run along the street and courtyard sides, mitred at the corners. Flat roofs get a parapet with a coping, and rooftop units.
+- **Chimneys:** 55,000 of them near the ridges, with 2,900 rooftop units. They go to `roofbits.bin` and are instanced per 320 m tile, drawn within 700 m, out of the reflection and the shadow map.
+- **Tiles:** the city is now one mesh per 320 m tile, so frustum and shadow culling work: 1.6M building triangles.
+- **Baked street-canyon occlusion:** each street wall looks out along its normal for the first building across the street and how high its eaves stand. The shader turns the angle to that skyline into ambient occlusion on the indirect light, so narrow streets and courtyards darken toward the ground.
+- **GTAO was tried and dropped:** three's GTAOPass came out black on every wall at city scale.
+
+**The ground** (`tools/build-ground.ts`, `src/world/ground.ts`)
+
+- **A new OSM extract,** `roads.geojson`: streets, footways, crossings, car parks, railways and piers.
+- **A 1 m mask over the world** (13 MB), its channels:
+  - the carriageways' signed distance, union of capsules with filleted junctions, so kerbs stay crisp at any distance;
+  - lawns;
+  - unpaved paths;
+  - setts (Castle Hill).
+- **Ground occlusion** at 2 m, from the buildings' and landmarks' skylines in 12 directions.
+- **Markings as geometry draped on the terrain:** 15,800 lane dashes (the centre line solid on the big two-way roads, kept clear of 8,800 junctions), 746 zebras, and 79 km of tram rails.
+- **The terrain's shader paints the photographed surfaces:** asphalt with a darker gutter, the kerb, paving slabs, setts, lawn, gravel, and the woods' litter off the paving. Irregular surfaces blend a second, rotated sample, so the tiling doesn't show.
+- **At night** the street lamps' pools light the carriageways and pavements.
+
+**Trees** (`tools/build-trees.ts`, `src/world/trees.ts`)
+
+- **Nine species:** plane, chestnut, linden, maple, poplar, willow, oak, robinia and pine.
+- **Planting:** by OSM genus or leaf type where tagged. Otherwise by setting, with neighbours tending to share a species:
+  - street rows: plane, linden, chestnut, maple and robinia;
+  - the banks: willow and poplar;
+  - Margaret Island: plane and poplar;
+  - the hill woods: oak, robinia and pine.
+- **Growth:** each species grows three shapes procedurally. The trunk and limbs reach toward a noisy ellipsoid crown, and the branches come off the limbs.
+- **Leaf cards:** they cluster round the branch ends and fill the crown's shell. Their normals lean out from the crown's centre, so a crown shades as a volume.
+- **Leaf clusters:** drawn as SVG per species (palmate, heart-shaped, compound, lobed, pinnate, needles), with a random value per leaf. Each tree turns its own share of leaves through yellow, orange and rust.
+- **Detail levels:** three, at 1,200–2,100, 190–290 and 36–80 triangles, re-sorted by distance and frustum five times a second. The wind sways the crowns.
+- Mipmaps would average the cut-out away, so the alpha threshold falls with the mip level.
+
+**The river's craft** (`src/ships.ts`)
+
+- **Sightseeing boats:** the two that ply the river are now 32 m boats with a glazed saloon, an open top deck with benches and a wheelhouse.
+- **Moored cruise ships:** 15 river-cruise hotel ships, 105–135 m, with three decks of windows, a sun deck with awnings and loungers, and the bridge forward. They lie at the real landing pontoons (OSM `man_made=pier`), mostly along the Pest bank.
+- **Pontoons:** 66 steel pontoons with shelters and ramps.
+- **At night** their panes light one by one. The ships and pontoons are in the glider's floor.
+
+**Traffic** (`src/world/traffic.ts`)
+
+- **Parked cars:** 53,000 along the side streets' kerbs.
+- **Moving traffic:** 1,400 cars wander the main roads' graph, keeping right and turning at random at junctions, with head and tail lamps after dusk.
+- **Bodies:** five types lofted in code, each with its own paint, drawn within 650 m of the camera.
+
+**Photographic textures and cards**
+
+- **The prompts:** they now ask for photographs of the real materials, with no style sheet attached.
+- **New layers:** plaster (for the firewalls and trim), and the five ground surfaces. These are levelled to calibrated brightness, asphalt dark and paving pale.
+- **The cards:** re-rendered from the new scene, then turned into photographs of the real place, keeping the composition.
+- **Cost:** 81 answers (64 for the textures, seam repairs included, and 17 cards) for $4.63, run six at a time. That's $13.09 spent of the $28.46 cap.
+
+**Smaller changes**
+
+- The moon is half a degree across, as it is.
+- The glider is smooth-shaded and reflects the sky.
+- The wake starts at the runabout's transom.
+- A cars share was added to the quality tiers: medium draws 60%, low none.
+
+**Downloads**
+
+- About 60 MB for the first frame and 73 MB with the full-size textures and the cards: `city.glb` 30 MB, the ground mask 13 MB.
+- The simulator's budgets are now 70 and 90 MB, to catch an accidental blow-up rather than to constrain.
+
 ## 2026-10-02 — Full-size skies, the last simple heroes, and the 2048² layers left out
 
 The gaps after KTX2: the design's 4096 × 2048 skies and 2048² hero textures, the heroes M4 left simple, and a recording from before the glider.

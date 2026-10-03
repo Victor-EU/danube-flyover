@@ -7,6 +7,7 @@
 import "./style.css";
 import {
   ACESFilmicToneMapping,
+  type Mesh,
   type Object3D,
   PCFShadowMap,
   type PerspectiveCamera,
@@ -19,7 +20,8 @@ import {
 import { type AudioJson, Sound } from "./audio";
 import { LOOP } from "./config";
 import { setPaused } from "./controller";
-import { Effects } from "./effects";
+import { Effects, type LifeJson } from "./effects";
+import { forwardOf } from "./geo";
 import { Hud } from "./hud";
 import { Input } from "./input";
 import { Lighting } from "./lighting";
@@ -33,6 +35,7 @@ import { setAnisotropy, upgradeTextures } from "./textures";
 import { VehicleMesh } from "./vehicleMesh";
 import { SHARED } from "./world/night";
 import { NightLights } from "./world/nightLights";
+import { Wake, type WakeBlock } from "./world/wake";
 import { LAYER, Water } from "./world/water";
 import { buildWorld } from "./world/world";
 
@@ -82,23 +85,28 @@ async function main(): Promise<void> {
 
   // Let the last progress paint before the synchronous world build (no rAF: it stalls in hidden tabs).
   await new Promise((r) => setTimeout(r, 30));
-  const world = buildWorld(files, models);
+  const sky = new SkyDome(models.textures);
+  const world = buildWorld(files, models, sky.envTexture);
 
   const scene = new Scene();
   scene.add(world.group);
-  const sky = new SkyDome(models.textures);
   const lighting = new Lighting(scene, sky);
   const zones = MIRROR_ZONES.flatMap((z) => {
     const s = world.sights.find((x) => x.id === z.id);
     return s ? [{ x: s.x, z: s.z, inner: z.inner, outer: z.outer }] : [];
   });
-  const water = new Water(world.water, world.pond, models.textures.waterNormal, sky.envTexture, zones);
+  const effects = new Effects(world.river, files.life ?? { trams: [] }, sky.envTexture);
+  scene.add(effects.group);
+  // The wake's waves stay in the river's meshes, and break on the piers and the moored craft.
+  const riverMeshes: Mesh[] = [];
+  world.group.traverse((o) => (o as Mesh).isMesh && (o as Mesh).material === world.water && riverMeshes.push(o as Mesh));
+  const wake = new Wake(renderer, world.river, riverMeshes, [...world.bridges.obstacles, ...mooredBlocks(files.life)]);
+  const water = new Water(world.water, world.pond, models.textures.waterNormal, sky.envTexture, zones, wake.supported ? wake : null);
+  if (water.patch) scene.add(water.patch);
   const night = new NightLights(world.river, world.bridges, world.landmarks!, world.sights, world.heroes!);
   scene.add(night.group);
-  const vehicleMesh = new VehicleMesh();
+  const vehicleMesh = new VehicleMesh(sky.envTexture);
   scene.add(vehicleMesh.group);
-  const effects = new Effects(world.river, files.life ?? { trams: [] });
-  scene.add(effects.group);
 
   const sim = createSim(route, world);
   const { st, rig, tour } = sim;
@@ -125,6 +133,7 @@ async function main(): Promise<void> {
     `water      mirror ${water.active ? water.mirrorWeight(rig.camera.position).toFixed(2) : "off"}  pool ${night.describePool()}`,
     `night      ${night.counts.lamps} lamps, ${night.counts.bulbs} bulbs, ${night.counts.streaks} streaks; floodlit ${night.floodlit.length}`,
     `effects    ${effects.describe()}`,
+    `waves      ${wake.describe()}`,
     `quality    ${quality.describe()}`,
     `textures   ${models.textures.status}`,
     `music      ${sound.describe()}`,
@@ -140,7 +149,6 @@ async function main(): Promise<void> {
 
   const params = new URLSearchParams(location.search);
   // Quality: the tier from ?quality=, or the device's start tier and then the frame probe.
-  const treeCount = world.trees?.count ?? 0;
   const touch = isTouchDevice();
   document.documentElement.classList.toggle("touch", touch);
   const quality = new Quality(qualityJson, params.get("quality"), touch, (t) => {
@@ -148,7 +156,8 @@ async function main(): Promise<void> {
     resize();
     post.setSamples(t.samples);
     lighting.setShadows(t.shadowMapSize);
-    if (world.trees) world.trees.count = Math.round(treeCount * t.trees);
+    world.trees?.setShare(t.trees);
+    world.traffic?.setShare(t.cars);
     setAnisotropy(models.textures, renderer, t.anisotropy);
     effects.setLife(t.life);
   });
@@ -156,6 +165,7 @@ async function main(): Promise<void> {
   qualitySelect.value = quality.mode;
   qualitySelect.addEventListener("change", () => quality.choose(qualitySelect.value as "auto", touch));
   compileAll(renderer, scene, rig.camera, post.target);
+  wake.prime(renderer);
 
   // Debug hooks for the console. flyover.jump(n) cuts straight to the start of beat n.
   const jump = (n: number) => tour.jumpNow(st, n);
@@ -170,8 +180,12 @@ async function main(): Promise<void> {
     const camera = debug.camera ?? rig.camera;
     lighting.update(st, renderer, rig.focus, camera.position, dt);
     world.landmarks?.update(camera.position);
-    vehicleMesh.update(st, dt);
-    effects.update(st, dt, Math.min(1, lighting.hemi.intensity * 1.3 + lighting.sun.intensity * 0.2));
+    world.update(camera, dt);
+    vehicleMesh.update(st, dt, wake.motion);
+    effects.update(st, dt, Math.min(1, lighting.hemi.intensity * 1.3 + lighting.sun.intensity * 0.2), wake);
+    for (const s of effects.takeSplashes()) wake.splash(s);
+    const v = st.vehicle;
+    wake.update(renderer, dt, camera.position, { x: v.x, z: v.z, heading: v.heading, onWater: v.boatness > 0.5 && v.y < 0.6 }, effects.hulls(st));
     const h = renderer.getDrawingBufferSize(tmpSize).y;
     night.update(st, camera, rig.focus, h, lighting.fog.density, water.mirrorWeight(camera.position), dt);
     hud.update(st, dt);
@@ -192,7 +206,7 @@ async function main(): Promise<void> {
     const n = Math.max(1, Math.round(seconds * 30));
     for (let i = 0; i < n; i++) frame(1 / 30, i === n - 1);
   };
-  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, textures: models.textures, rig, scene, renderer, lighting, sky, water, night, post, effects, quality, sound, jump, step }) });
+  Object.assign(window, { flyover: Object.assign(debug, { st, sim, route, world, textures: models.textures, rig, scene, renderer, lighting, sky, water, wake, night, post, effects, quality, sound, jump, step }) });
 
   // Dev only: ?record=timelapse (or beat<n>) records the run instead of playing it (src/record.ts).
   const recordMode = import.meta.env.DEV ? params.get("record") : null;
@@ -219,6 +233,20 @@ async function main(): Promise<void> {
 }
 
 const tmpSize = new Vector2();
+
+/** The moored ships (11.4 m in the beam) and pontoons (6 m) as boxes the waves break on. */
+function mooredBlocks(life: LifeJson | undefined): WakeBlock[] {
+  const out: WakeBlock[] = [];
+  const add = (list: number[] | undefined, beam: number) => {
+    for (let k = 0; list && k + 3 < list.length; k += 4) {
+      const f = forwardOf(list[k + 2]);
+      out.push({ cx: list[k], cz: list[k + 1], ux: f.x, uz: f.z, halfAlong: list[k + 3] / 2, halfAcross: beam / 2 });
+    }
+  };
+  add(life?.ships, 11.4);
+  add(life?.pontoons, 6);
+  return out;
+}
 
 /**
  * Compile every program before the first frame, hidden objects included (the boat in flight,

@@ -5,7 +5,7 @@
 // Writes public/data/floor.bin. Usage: npm run build-floor (after build-city)
 
 import { readFileSync } from "node:fs";
-import { GLIDER, WORLD } from "../src/config";
+import { GLIDER, TREE_SPECIES, WORLD } from "../src/config";
 import { worldBounds } from "../src/world/bounds";
 import { Bridges, type BridgesJson } from "../src/world/bridges";
 import { FLOOR_CELL, FLOOR_KIND } from "../src/world/floor";
@@ -118,16 +118,33 @@ for (const l of landmarks)
     counts.hero += raise(p.x - r, p.z - r, p.x + r, p.z + r, (x, z) => inPart(p, x, z, HALF_DIAG), p.top, FLOOR_KIND.land);
   }
 
-// Tree crowns, as the runtime draws them: radius 4.5 m and top 13 m above the ground, times the
+// Tree crowns, as the runtime draws them: each species' height and crown radius times the
 // scale. The glider keeps only TREE_CLEARANCE above a crown, not the full land clearance, so the
 // crown goes in lowered by the difference.
 const TREE_CLEARANCE = 4;
-for (let t = 0; t < trees.length; t += 3) {
-  const [x, z, s] = [trees[t], trees[t + 1], trees[t + 2]];
-  const r = 4.5 * s;
-  const top = terrain.heightAt(x, z) + 13 * s + TREE_CLEARANCE - GLIDER.landClearance;
+for (let t = 0; t < trees.length; t += 4) {
+  const [x, z, s, sp] = [trees[t], trees[t + 1], trees[t + 2], trees[t + 3]];
+  const r = TREE_SPECIES[sp].radius * s;
+  const top = terrain.heightAt(x, z) + TREE_SPECIES[sp].height * s + TREE_CLEARANCE - GLIDER.landClearance;
   counts.tree += raise(x - r, z - r, x + r, z + r, (px, pz) => Math.hypot(px - x, pz - z) <= r + HALF_DIAG * 0.5, top, FLOOR_KIND.land);
 }
+
+// Moored ships and pontoons, on the water: solid, like a tower in the river.
+const life = readData<{ ships?: number[]; pontoons?: number[] }>("life.json");
+let moored = 0;
+for (const [list, half, top] of [[life.ships ?? [], 5.7, 13], [life.pontoons ?? [], 3, 3.5]] as const)
+  for (let k = 0; k < list.length; k += 4) {
+    const [x, z, h, len] = [list[k], list[k + 1], list[k + 2], list[k + 3]];
+    const ux = Math.sin(h);
+    const uz = -Math.cos(h);
+    const r = len / 2 + half;
+    moored += raise(x - r, z - r, x + r, z + r, (px, pz) => {
+      const a = (px - x) * ux + (pz - z) * uz;
+      const c = -(px - x) * uz + (pz - z) * ux;
+      return Math.abs(a) <= len / 2 + HALF_DIAG && Math.abs(c) <= half + HALF_DIAG;
+    }, top, FLOOR_KIND.tower);
+  }
+counts.tower += moored;
 
 for (const o of bridges.obstacles) {
   if (!o.tower) continue;

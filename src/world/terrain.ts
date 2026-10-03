@@ -11,19 +11,25 @@ export const TERRAIN_CELL = 10;
 /** Landcover classes stored per sample. */
 export const TERRAIN_CLASS = { bed: 0, street: 1, park: 2, wood: 3, square: 4, pitch: 5, rock: 6, island: 7 } as const;
 
+/** Classes paved over (the ground's paving texture), as against grass, woods and rock. */
+const URBAN: Record<number, number> = { 1: 1, 4: 1 };
+
 /** Street-light glow at night by class: streets and squares lit, parks a little, woods dark. */
 const GLOW: Record<number, number> = { 1: 1, 4: 0.85, 5: 0.25, 2: 0.12, 7: 0.05 };
 
-/** Ground colour by class, in early October: tired olive grass, leaf litter under the woods. */
+/**
+ * Ground colour by class, in early October: the paving of the streets and squares (the ground
+ * mask paints the roads, lawns and paths over it), tired olive grass, leaf litter in the woods.
+ */
 const PALETTE: Record<number, Color> = {
   0: new Color("#2f3f3d"),
-  1: new Color("#b9ae97"),
-  2: new Color("#8a9852"),
-  3: new Color("#77693d"),
-  4: new Color("#cbbf9f"),
-  5: new Color("#8aa65e"),
-  6: new Color("#a99d8a"),
-  7: new Color("#879a55"),
+  1: new Color("#a7a196"),
+  2: new Color("#6d763d"),
+  3: new Color("#6a5935"),
+  4: new Color("#b4ab99"),
+  5: new Color("#6f8c45"),
+  6: new Color("#9d9284"),
+  7: new Color("#727f3d"),
 };
 
 export class Terrain {
@@ -91,6 +97,7 @@ export class Terrain {
     const pos = new Float32Array(mx * mz * 3);
     const col = new Float32Array(mx * mz * 3);
     const glow = new Float32Array(mx * mz);
+    const urban = new Float32Array(mx * mz);
     const c = new Color();
     const r = Math.floor(stride / 2);
     for (let b = 0; b < mz; b++)
@@ -105,6 +112,7 @@ export class Terrain {
         const bed = this.classes[k] === TERRAIN_CLASS.bed;
         let n = 0;
         let g = 0;
+        let u = 0;
         let [cr, cg, cb] = [0, 0, 0];
         for (let jj = Math.max(0, j - r); jj <= Math.min(nz - 1, j + r); jj++)
           for (let ii = Math.max(0, i - r); ii <= Math.min(nx - 1, i + r); ii++) {
@@ -115,12 +123,14 @@ export class Terrain {
             cg += c.g;
             cb += c.b;
             g += GLOW[this.classes[kk]] ?? 0;
+            u += URBAN[this.classes[kk]] ?? 0;
             n++;
           }
         col[v * 3] = cr / n;
         col[v * 3 + 1] = cg / n;
         col[v * 3 + 2] = cb / n;
         glow[v] = g / n;
+        urban[v] = u / n;
       }
     // Skip quads entirely under the water: the river surface hides them anyway.
     const h = this.heights;
@@ -142,6 +152,7 @@ export class Terrain {
     geo.setAttribute("position", new BufferAttribute(pos, 3));
     geo.setAttribute("color", new BufferAttribute(col, 3));
     geo.setAttribute("glow", new BufferAttribute(glow, 1));
+    geo.setAttribute("urban", new BufferAttribute(urban, 1));
     geo.setIndex(new BufferAttribute(new Uint32Array(index), 1));
     geo.computeVertexNormals();
     let mat = material;

@@ -362,7 +362,10 @@ console.log("\n— Music —");
   check(new Set(played.map((p) => p.track)).size === tracks.length, "every track plays within two passes");
 }
 
-// 6. The download budgets: the first-frame set, and all that loads without the music.
+// 6. The download budgets: the first-frame set, and all that loads without the music. Since
+// the realism pass size is no longer the design's constraint (the roofed city, the ground's
+// mask, the trees and the traffic outweigh the old 25 MB); these catch an accidental blow-up.
+const BUDGET = { first: 70, total: 90 };
 console.log("\n— Downloads —");
 {
   const root = new URL("../public/data/", import.meta.url);
@@ -373,8 +376,8 @@ console.log("\n— Downloads —");
   const cards = sizeOf(new URL("cards/", root)) / 1e6;
   const full = sizeOf(new URL("tex/full/", root)) / 1e6;
   const first = all - audio - cards - full;
-  check(first <= 12, `${first.toFixed(1)} MB in the first-frame set, within its 12 MB`);
-  check(first + full + cards <= 25, `${(first + full + cards).toFixed(1)} MB with the full-size textures (${full.toFixed(1)} MB, after the first frame) and the cards (${cards.toFixed(1)} MB), within the 25 MB initial download`);
+  check(first <= BUDGET.first, `${first.toFixed(1)} MB in the first-frame set, within its ${BUDGET.first} MB`);
+  check(first + full + cards <= BUDGET.total, `${(first + full + cards).toFixed(1)} MB with the full-size textures (${full.toFixed(1)} MB, after the first frame) and the cards (${cards.toFixed(1)} MB), within the ${BUDGET.total} MB initial download`);
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");

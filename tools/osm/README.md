@@ -2,7 +2,7 @@
 
 These GeoJSON files are extracts of OpenStreetMap, fetched with `npm run fetch-osm` (Overpass API) for the world rectangle plus a small margin. Each file records the OSM data timestamp (`osm_base`) and the bounding box, and keeps only the tags the pipeline uses.
 
-**Licence:** © OpenStreetMap contributors. These extracts, and the files derived from them in `public/data/` (`river.json`, `water.glb`, `terrain.bin`, `bridges.json`, `city.glb`, `heroes/*.glb`, `trees.json`, `floor.bin`, `life.json`, and the positions in `landmarks.json`), are made available under the [Open Database Licence (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Any public use must credit "© OpenStreetMap contributors"; see https://www.openstreetmap.org/copyright.
+**Licence:** © OpenStreetMap contributors. These extracts, and the files derived from them in `public/data/` (`river.json`, `water.glb`, `terrain.bin`, `bridges.json`, `city.glb`, `heroes/*.glb`, `trees.json`, `floor.bin`, `life.json`, `roofbits.bin`, `ground/`, and the positions in `landmarks.json`), are made available under the [Open Database Licence (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Any public use must credit "© OpenStreetMap contributors"; see https://www.openstreetmap.org/copyright.
 
 | File | Contents |
 | --- | --- |
@@ -13,3 +13,4 @@ These GeoJSON files are extracts of OpenStreetMap, fetched with `npm run fetch-o
 | `trees.geojson` | `natural=tree` points and `natural=tree_row` lines |
 | `districts.geojson` | Budapest district boundaries (`admin_level=9`) |
 | `trams.geojson` | tram tracks, traced into the embankment tram lines (`build-life`) |
+| `roads.geojson` | `highway=*` ways (streets, footways, steps, squares), `area:highway` outlines, parking, railways and piers: the ground's streets, pavements and markings |

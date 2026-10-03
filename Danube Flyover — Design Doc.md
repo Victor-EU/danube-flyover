@@ -8,9 +8,9 @@ Oct 1, 2026 · @Victor Zhang
 
 Danube Flyover is a browser-based 3D showcase of the Budapest riverfront: you fly a glider from the Japanese Garden on Margaret Island to the Central Market Hall, and at any point you can land on the water and continue as a boat. An autopilot plays the trip as a guided, cinematic tour by default; the user can take control at any moment and hand it back.
 
-The world is a stylized, low-poly Budapest, not a photoreal reconstruction. Real geography (river bends, bridge positions, the two Buda hills) gives it credibility; generated textures and a storybook palette give it character. A time-of-day slider runs the whole scene from morning haze through golden hour to a fully lit night.
+The world is a Budapest as close to reality as open data and the browser allow (since the realism pass of 3 October; it began as a stylized, low-poly city). Real geography (river bends, bridge positions, the two Buda hills) and the real city (every OSM building roofed from its block's straight skeleton, the streets, kerbs and markings, the trees by species, the moored ships, the traffic) give it credibility; photographed materials and a physically lit scene give it its look. A time-of-day slider runs the whole scene from morning haze through golden hour to a fully lit night.
 
-Target feel: a travel-poster Budapest you can move through. The two money shots are golden hour from the air over Parliament and night on the water under the Chain Bridge. Everything in this document serves those two moments.
+Target feel: Budapest as you'd see it from a glider and a boat. The two money shots are golden hour from the air over Parliament and night on the water under the Chain Bridge. Everything in this document serves those two moments.
 
 The route is about 5.5 km of river, and about 8.6 km flown once the arc around Parliament and the swing over Buda are counted. A full autopilot run takes about 9½ minutes: flight over Margaret Island and past Parliament, a landing just north of the Chain Bridge, a boat leg under the Chain Bridge and past the Castle and Gellért Hill, and a final take-off for an aerial of the Market Hall roof.
 
@@ -27,7 +27,7 @@ The route is about 5.5 km of river, and about 8.6 km flown once the arc around P
 
 **Non-goals**
 
-- Photoreal accuracy. Buildings outside the hero list are simple extruded blocks with generated facades.
+- Survey accuracy. Buildings outside the hero list are their OSM footprints to their tagged (or typical) eaves, with roofs, cornices and chimneys made from rules and photographed facades, not modelled one by one.
 - A full flight or boat simulator. Movement is constrained to a corridor around the river spline.
 - The whole city. The world ends a few hundred metres back from each bank (further on Buda, to take in Castle Hill); beyond that is a painted backdrop.
 - Multiplayer, accounts, or any backend. State lives in the browser.
@@ -55,7 +55,7 @@ The app opens in autopilot at golden hour, gliding above the Japanese Garden, an
 **Modes**
 
 - *Glider*: altitude up to 180 m above the water. Over water it can come down to the surface; over land it stays at least 15 m above the floor (ground, buildings and bridge towers; see Corridor). Speed 8 to 25 m/s, free steering within a corridor 300 m either side of the route. Pitch and bank are visual only; the path is corridor-constrained.
-- *Boat*: on the water surface, speed 2 to 12 m/s (cruise 8 m/s), steering within the river polygon. Camera at about 1.5 m above water, slight bob and wake.
+- *Boat*: on the water surface, speed 2 to 12 m/s (cruise 8 m/s), steering within the river polygon. Camera 7.5 m behind and 2 m above the water. The boat rides the waves under it, its own wake's and the tour boats'.
 - *Switch*: in glider mode over water, holding descend (Q) until altitude drops below 2 m triggers landing. In boat mode, holding throttle at max speed for 1 s triggers take-off, unless the boat is under or just before a bridge deck. Both are also keyframed into the autopilot.
 
 **Control model**
@@ -77,15 +77,16 @@ The app opens in autopilot at golden hour, gliding above the Japanese Garden, an
 **Scene layers**, from the bottom up:
 
 1. *Terrain*: a heightmap mesh from a DEM, flat on the Pest side, rising to Castle Hill (about 70 m above the river; 168 m above sea level) and Gellért Hill (about 135 m above the river; 235 m above sea level) on Buda. 10 m resolution is enough. The DEM needs processing before use (see the Terrain row under Data sources).
-2. *Water*: the river polygon as a flat mesh at 0 m with an animated normal map, reflections (planar near the two money shots, a reflection probe elsewhere, plus light streaks at night; see Night) and a foam/wake decal under the boat.
+2. *Water*: the river polygon as a flat mesh at 0 m with an animated normal map, reflections (planar near the two money shots, a reflection probe elsewhere, plus light streaks at night; see Night). Around the boat, a 256 m square of simulated linear deep-water waves (an FFT on the GPU, following the boat and drifting with the current) makes the wakes: the hulls press on the water, the waves disperse into Kelvin wakes, and foam ages from white water into lace. A dense mesh around the camera is displaced by them.
 3. *Embankments and quays*: extruded strips along both banks with a generated stone texture; tram tracks on the Buda side as a decal.
-4. *Filler buildings*: OSM footprints extruded to tagged height (or levels × 3.3 m, default 18 m), merged into a handful of meshes per district (every footprint is unique, so they are merged, not instanced), textured with 6 to 8 generated facade atlases chosen by district and height. Window emissive mask for night.
+4. *Filler buildings*: OSM footprints extruded to their eaves (tagged height less the roof, or levels × 3.3 m, or 15–21 m), roofed from their block's straight skeleton (pitched, mansard, steep or flat), with firewalls, cornices, parapets, chimneys and rooftop units, merged into one mesh per 320 m tile, textured with 8 photographed facade atlases chosen by district and height and baked street-canyon occlusion. Window emissive mask for night.
 5. *Hero landmarks*: modelled in code (`tools/heroes/`) on their OSM footprints and the bridges' decks: Parliament, Buda Castle, Fisherman's Bastion with Matthias Church, Chain Bridge, Elisabeth Bridge, Liberty Bridge, Margaret Bridge, Gellért Hotel, Liberty Statue, Central Market Hall, and with the same kit the other landmarks on the cards. Each under 20k triangles, textured from shared day layers, with window masks for the night.
-6. *Vegetation*: Margaret Island and the hills as instanced low-poly trees, 3 or 4 species, billboards beyond 500 m.
+6. *Vegetation*: Margaret Island, the streets and the hills as instanced trees of nine species, grown procedurally (branches and leaf cards), at three levels of detail by distance.
 7. *Backdrop*: a ring of painted hills and city silhouette at 2 km, plus the skydome.
-8. *Life*: trams on both embankments, two tour boats on a loop up and down the river, and flocks of gulls (left out on the low tier).
+8. *Life*: trams on both embankments, two sightseeing boats on a loop up and down the river, river-cruise ships moored at the pontoons, parked cars and traffic on the main roads, and flocks of gulls (left out on the low tier).
+9. *Ground*: the streets painted onto the terrain from a 1 m mask (carriageway distance field, lawns, paths, setts), with photographed asphalt, paving, setts, lawn and gravel, ground occlusion, and markings and tram rails as geometry.
 
-**Art direction.** Stylized, warm, between a travel poster and an animated-film background. Palette anchored on Budapest stone (warm ochres and creams), slate and copper roofs, dark teal water, and gold night lighting. Low-poly geometry with clean silhouettes, soft ambient occlusion, light fog. No photographs, no text on buildings. One style sheet image is generated first and used as a reference for every later generated texture so the world reads as one hand.
+**Art direction.** Realistic: the city as it is, in the light of the hour. Budapest's stone and plaster (warm ochres, creams and greys, aged), tile, slate, tin and copper roofs, dark teal water, and gold night lighting. Photographed materials (from the image API, as photographs of the real surfaces), shadows and baked occlusion, light haze. No text on buildings. (Until the realism pass: stylized, between a travel poster and an animated-film background, with a style sheet attached to every generated texture.)
 
 **Scale honesty.** Positions and bridge spans match reality; building heights match tags. Hero landmarks may be exaggerated up to 15 percent vertically to read better from the air.
 
@@ -158,7 +159,8 @@ The Controller is the only module that knows about both autopilot and the user; 
 | `lighting` | Sun and moon directional lights, hemisphere light, the sky dome (`sky`), fog, exposure and bloom curves, the shared night ramp; every curve keyed to sun elevation | time of day | light state |
 | `hud` | Bottom bar, time slider, mode badge, music button, OSM credit, landmark cards, about overlay | state | DOM |
 | `audio` | The music: off until turned on from a user gesture (remembered); two streamed media elements crossfading over 6 s into the next track for the light (day tracks until dusk, night tracks after); a Web Audio gain for the volume and a safety limiter; pauses with a hidden tab | audio.json, night ramp | sound |
-| `effects` | Boat wake, splash on landing, foam, gulls, ambient boats and trams | vehicle pose, mode | scene objects |
+| `effects` | The hulls and splashes that make the wakes, spray, gulls, ambient boats and trams | vehicle pose, mode | scene objects, wave sources |
+| `wake` | The waves around the boat: a GPU FFT simulation of linear deep-water waves in a square that follows the boat and drifts with the current; the hulls press on it, the land and piers take its waves, and foam ages from white water into lace; a probe reads the heights under the hull back for its motion | wave sources, river mask, camera | the water's slopes, foam and displaced patch; the boat's heave, pitch and roll |
 | `render` | Renderer, the planar reflection pass, post-processing (bloom, tone mapping, `post`), resize, quality tiers and the frame-time probe (`quality`) | scene, camera | frame |
 
 **Mode state machine**: `GLIDER` → `LANDING` → `BOAT` → `TAKEOFF` → `GLIDER`. Landing starts when altitude drops below 2 m over water with downward velocity (manual) or on a keyframe (autopilot); it runs for 2 s during which the vehicle decelerates to boat speed and the camera lowers. Take-off is the mirror, 2.5 s, and never starts under a bridge deck or within 30 m before one. Inputs during a transition are ignored.
@@ -168,7 +170,7 @@ The Controller is the only module that knows about both autopilot and the user; 
 - `route.json`: an ordered list of control points `{lat, lon, alt, speed, mode, hold?, beat?, timeOfDay?, camera?}`. `mode` applies from that point on; heading comes from the spline. A beat is anchored to the point where it starts (`beat: {id, name}`), so editing points never invalidates a hand-written arc length; `camera: {mode, target?}` sets the camera mode from that point to the next camera key (`target` is a landmark id); `timeOfDay` keys the sunset-run clock at that point.
 - `landmarks.json`: `{id, name, position, triggerRadius, model, height?, base?, note, text, illustration, osm?}`; `model` is the hero's glb, `height` sets the aim point (half way up) and the label, `note` is the card's two lines and `text` its paragraph, and `osm` lists the OSM buildings the hero replaces.
 - `audio.json`: the music, hand-edited: `{file, original, title, artist, licence, licenceUrl, source, light, gain, seconds}`; `light` is `day` or `night`, and `npm run audio` writes `gain` and `seconds`.
-- `quality.json`: three tiers (low, medium, high) setting the pixel-ratio cap, shadow map size, planar reflections and their resolution, bloom, MSAA, the share of trees, anisotropy and ambient life; plus the start tier for desktop and touch devices and the probe's settings.
+- `quality.json`: three tiers (low, medium, high) setting the pixel-ratio cap, shadow map size, planar reflections and their resolution, bloom, MSAA, the share of trees and cars, anisotropy, ambient life and the wake's simulation (512², 256² or off); plus the start tier for desktop and touch devices and the probe's settings.
 - `floor.bin`: the glider's altitude-floor grid, written by `build-floor.ts`. `terrain.bin` and `floor.bin` share one format: a JSON header and typed-array layers, zlib-compressed.
 - Written by the pipeline, read at load: `river.json`, `bridges.json`, `trees.json`, `terrain.bin`, `city.glb`, `water.glb`, `heroes/*.glb`, `life.json`.
 
@@ -239,7 +241,7 @@ Beats never move the vehicle; they only move the camera around it. This keeps ma
 1. Trigger: altitude below 2 m over water with vertical speed negative (manual), or a `mode: boat` keyframe (autopilot).
 2. Vehicle: speed eases from current to boat cruise (8 m/s); altitude eases to 0; pitch eases to level.
 3. Camera: offset eases from glider follow to boat follow; field of view narrows from 70 to 60 degrees.
-4. Effects: at t = 0.6 s a splash ring and foam decal spawn; the wake starts at t = 1.0 s; the glider mesh morphs or swaps to the boat mesh behind the splash.
+4. Effects: at t = 0.6 s the splash punches a crater in the water that rings out, with spray and foam; the boat's hull presses on the water (its wake) from t = 1.0 s; the glider mesh morphs or swaps to the boat mesh behind the splash.
 5. Inputs ignored for the duration; HUD badge switches at t = 1.0 s.
 
 **Take-off (boat to glider), 2.5 s.** The mirror: triggered by holding throttle at max for 1 s or a `mode: glider` keyframe, but never under a bridge deck or within 30 m before one (the trigger waits until the boat is clear); speed rises to glider cruise (15 m/s), altitude rises to 25 m on an ease-out, the wake fades, the camera widens. A short spray burst at t = 0.3 s.
@@ -252,15 +254,15 @@ Beats never move the vehicle; they only move the camera around it. This keeps ma
 
 ## Performance budget and constraints
 
-Target: 60 fps at 1080p on a 2022 integrated-GPU laptop (high tier), 30 fps on a 2021 phone (low tier). The budget below is for the high tier; lower tiers scale down shadows, reflections, trees and bloom via `quality.json`, chosen at start from a 2 s frame-time probe.
+Target: 60 fps at 1080p on a 2022 integrated-GPU laptop (high tier), 30 fps on a 2021 phone (low tier). The budget below is for the high tier; lower tiers scale down shadows, reflections, trees, cars and bloom via `quality.json`, chosen at start from a 2 s frame-time probe. Since the realism pass the city is far heavier: about 24 ms a frame at 2880 × 1720 on an M3 (high tier, full retina), so the probe's step down to medium matters more.
 
 | Budget item | Limit | Notes |
 | --- | --- | --- |
-| Triangles in view | 1.5 M | City merged into \~12 meshes (by district and material); heroes ≤ 20k each |
+| Triangles in view | 3 M | The city in 320 m tiles (1.6 M building triangles in all), culled per tile; chimneys and rooftop units, trees and cars instanced and drawn near the camera only; heroes ≤ 20k each |
 | Draw calls | 150 in the main pass; ≤ 75 each in the shadow and reflection passes | Merge by material; trees instanced; shadow and reflection passes draw a reduced set; at most 4 real point lights, everything else emissive sprites |
 | Texture memory | 256 MB | KTX2/Basis at the masters' 1024² for the facade, roof, quay and hero layers: 27 MB as ETC2. The panoramas at 4096×2048 as UASTC: 32 MB as ASTC or BC7 |
-| Initial download | 25 MB | Meshopt-compressed, quantised glTF; textures streamed after first frame |
-| Time to first frame | 3 s | On a 50 Mbps connection. The first frame needs only the first-frame set (procedural sky, water, terrain, city), at most 12 MB, about 2 s; progressive loading with a styled loading screen |
+| Initial download | 90 MB (was 25 MB) | Meshopt-compressed, quantised glTF; textures streamed after first frame. About 73 MB since the realism pass: the roofed city 30 MB, the ground mask 13 MB |
+| Time to first frame | 12 s | On a 50 Mbps connection: the first-frame set is about 60 MB (was at most 12 MB); progressive loading with a styled loading screen |
 | Shadow map | 2048² high / 1024² medium / off low | One cascade, fitted to a 600 m box around the camera |
 | Water reflection | 50% resolution planar / probe | Planar reflection costs a second scene pass; use it only near the two money shots (inside the Parliament and Chain Bridge trigger radii) on medium and high; elsewhere a probe, plus streak sprites for night lights |
 | Music | 20 MB, streamed on demand | Four AAC tracks, 16.4 MB; nothing is fetched until the music is turned on, so it is outside the initial download |

@@ -2,13 +2,24 @@
 
 A browser-based 3D flight along the Budapest riverfront: a glider from the Japanese Garden on Margaret Island to the Central Market Hall, landing on the Danube to continue as a boat. See [the design doc](<Danube Flyover — Design Doc.md>) and [the decisions log](docs/decisions.md).
 
-This is **M4, heroes**, plus what came after it, on top of M3's lighting, M2's autopilot, M1's geography and the M0 grey box:
+This is **the realism pass** (3 October; see the decisions log) on top of M4's heroes, M3's lighting, M2's autopilot, M1's geography and the M0 grey box:
+
+- the city roofed from straight skeletons: touching buildings merge into blocks whose roofs (pitched, hipped, mansard, steep or flat) run across the party walls, with firewalls, cornices, parapets, 55,000 chimneys and rooftop units, photographed facades, and occlusion baked into the street canyons;
+- the ground: streets, kerbs, pavements, lawns, gravel paths and Castle Hill's setts from OpenStreetMap, in photographed materials, with lane markings, zebras and tram rails, and the street lamps' glow at night;
+- trees of nine species, grown in code from branches and leaf clusters, at three levels of detail, each with its own autumn;
+- the boat: a 1960s varnished-mahogany runabout with leather benches, a chrome-framed windscreen and the Hungarian flag;
+- the wake: the river around the boat simulated as real waves (an FFT on the GPU), so it makes a true V that curves through turns and runs on after a stop, the tour boats make theirs, they cross, and the boat rides them; with white water, lace, spray and a glassy scar;
+- the river's craft: sightseeing boats, river-cruise ships moored at the real pontoons, and the pontoons themselves;
+- traffic: parked cars along the side streets and cars on the main roads, lit after dusk;
+- the landmark cards as photographs, made from renders of the scene;
+
+and from before it:
 
 - the glider: a white sailplane (it replaced M0's bird), with navigation lights at night;
 - autumn: three quarters of the trees have turned, and the grass is olive;
 - music: four jazz tracks by Kevin MacLeod (CC BY 4.0), off until you turn it on, day tracks at golden hour and night tracks after dusk;
 - the ten hero landmarks, modelled in code on their real footprints: Parliament, the Chain, Margaret, Elisabeth and Liberty Bridges, Fisherman's Bastion and Matthias Church, Buda Castle, the Liberty Statue, the Gellért Hotel and the Central Market Hall; plus the Academy, Gresham Palace, the Vigadó, the Citadella and the Shoes on the Danube;
-- effects: the boat's wake and foam, the landing splash and the take-off spray;
+- effects: the landing splash and the take-off spray, and (on the low tier) a foam trail for the wake;
 - ambient life: two tour boats, trams on both embankments, gulls over the river;
 - quality tiers (high, medium, low), chosen by device and a 2 s frame-time probe, or in the About overlay;
 - the mobile pass: touch steering (and take-off), a wider view on phones held upright, a golden-hour still where WebGL2 is missing;
@@ -18,7 +29,7 @@ This is **M4, heroes**, plus what came after it, on top of M3's lighting, M2's a
 - from M1: the real city from OpenStreetMap, terrain from Copernicus GLO-30, the river, the five bridges and 16,000 trees;
 - from M0: the route and its autopilot, the vehicle and the boat, the landing and take-off, manual control with hand-back, and the time-of-day slider.
 
-The building and landmark textures and the card illustrations are AI-generated with OpenAI's image API, repainted from the procedural textures and from renders of the scene; the skies and the water are procedural. See `docs/decisions.md`.
+The building, landmark and ground textures and the card pictures are AI-generated with OpenAI's image API, as photographs of the real materials and places, made from the procedural textures and from renders of the scene; the skies, the water, the leaves and the boat's mahogany are procedural. See `docs/decisions.md`.
 
 ## Run it
 
@@ -31,7 +42,7 @@ npm run simulate   # headless runs: the tour through the loop (beats, camera, ca
                    # scripted checks of pause, hand-back and the jumps, the lighting at the money shots,
                    # the heroes, cards, quality tiers and tram lines, the music's licences and playlist,
                    # and the download budgets
-npm run textures   # repaint the texture set and the style sheet, and pack public/data/tex/
+npm run textures   # repaint the (procedural) texture set and its sheet, and pack public/data/tex/
 npm run cards      # finish the card illustrations (after ?record=cards, below)
 npm run audio      # trim, level and encode the music into public/data/audio/ (macOS; originals in tools/out/audio/)
 ```
@@ -70,7 +81,8 @@ The world is built offline by the scripts in `tools/` and committed, so the site
 ```bash
 npm run fetch-osm    # 1. OpenStreetMap layers -> tools/osm/*.geojson (Overpass; slow, retries on 504)
 npm run fetch-dem    #    Copernicus GLO-30 window -> tools/dem/ (cloud-optimised GeoTIFF on AWS)
-npm run build-world  # 2-8. everything below, in order (about 15 s, deterministic)
+npm run build-world  # 2-8. everything below, in order (about 2 minutes, deterministic)
+npm run build-trees  #    the tree species and their leaf clusters (not in build-world)
 ```
 
 | Step | Script | Writes |
@@ -79,24 +91,26 @@ npm run build-world  # 2-8. everything below, in order (about 15 s, deterministi
 | 3 | `build-terrain.ts` | `terrain.bin`: 10 m heights above the river and a landcover class per sample (`-- --debug <dir>` writes a hillshade PNG) |
 | 4 | `build-bridges.ts` | `bridges.json`: deck outlines, piers and towers from OSM, with hand-set heights and styles |
 | 5 | `build-heroes.ts` | `heroes/<id>.glb`: the landmarks, modelled in code in `tools/heroes/`; `-- <id>` builds one |
-| 6 | `build-city.ts` | `city.glb`: buildings merged per district, and ponds; `trees.json` |
-| 7 | `build-floor.ts` | `floor.bin`: the glider's 5 m altitude-floor grid |
-| 8 | `build-life.ts` | `life.json`: the tram lines along both embankments |
-| 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface and hero array textures, quay, water normal map and skies as WebP, and `tex/full/`, the layers and quay at full size and the skies at 4096 × 2048 as KTX2 (about 3 minutes to encode); and `docs/style-sheet.webp` |
+| 6 | `build-city.ts` | `city.glb`: buildings roofed from their blocks' straight skeletons (`tools/lib/roofs.ts`, in worker threads), with firewalls, cornices and baked canyon occlusion, one mesh per 320 m tile, and ponds; `roofbits.bin` (chimneys and rooftop units); `trees.json` (with each tree's species) |
+| 7 | `build-life.ts` | `life.json`: the tram lines along both embankments, the landing pontoons and the cruise ships moored at them |
+| 8 | `build-floor.ts` | `floor.bin`: the glider's 5 m altitude-floor grid (with the moored ships) |
+| 8b | `build-ground.ts` | `ground/`: the 1 m mask the terrain paints the streets, lawns, paths and setts with, the ground's occlusion, the markings and tram rails, the main roads' graph for the traffic, and the parked cars |
+| – | `build-trees.ts` | `trees/`: each species grown in three shapes at three levels of detail, and the leaf clusters |
+| 9 | `gen-textures.ts`, then `pack-textures.ts` | `assets/raw/` (lossless masters, not committed), then `tex/`: the surface (facades, roofs, plaster), ground and hero array textures, quay, water normal map and skies as WebP, and `tex/full/`, the layers and quay at full size and the skies at 4096 × 2048 as KTX2 (about 3 minutes to encode); and `docs/style-sheet.webp` |
 
 `gen-textures` is procedural by default, offline and deterministic. The committed set is the image-API one, below. A plain `npm run textures` replaces it with the procedural set.
 
 ### The image-API set
 
-The committed textures and card illustrations come from OpenAI's image API (`gpt-image-2.5-sunburst` at "high"). The style sheet is attached to every request. Each texture repaints its procedural twin as a layout guide, and each card repaints its scene render. Put the key in a git-ignored `.env.local` at the repo root, and never in the code or the chat:
+The committed textures and card pictures come from OpenAI's image API (`gpt-image-2.5-sunburst` at "high"), asked for photographs of the real materials and places (`tools/prompts/common.txt`, `card_photo.txt`). Each facade, roof and hero layer repaints its procedural twin as a layout guide, and each card turns its scene render into a photograph. Put the key in a git-ignored `.env.local` at the repo root, and never in the code or the chat:
 
 ```bash
 echo 'OPENAI_API_KEY=sk-...' > .env.local
-npm run gen-textures -- --api --dry --budget 20   # lists what it would ask for and the cost
-npm run gen-textures -- --api --budget 20         # the style sheet, facades, roofs, quay and hero layers
+npm run gen-textures -- --api --dry --budget 28.46            # lists what it would ask for and the cost
+npm run gen-textures -- --api --parallel 6 --budget 28.46      # facades, roofs, quay, plaster, ground and hero layers
 npm run pack-textures
 # then record the card renders with the new textures: open the dev server at /?record=cards
-npm run cards -- --api --budget 20
+npm run cards -- --api --parallel 6 --budget 28.46
 ```
 
 How a run works:
@@ -104,9 +118,9 @@ How a run works:
 - **Cache:** every answer is kept in `assets/raw/api/<name>-<key>.png`, keyed by a hash of everything sent. A rerun only asks for what's missing or changed, and `--force` asks again. Keep a copy of that folder: it isn't committed (252 MB), and without it a rerun pays again and paints different images.
 - **Budget:** `spent.json` there totals what every answer cost, across runs and tools. `--budget <usd>` (or `OPENAI_IMAGE_BUDGET`) stops a run before a request could take the total over.
 - **Seams:** a seam is repaired only where it stands out, and a repair that strays from the surface is asked once more. Check `assets/raw/check/` (each texture tiled 2 × 2) before packing.
-- **Options:** `--only <name>` limits a run, and `OPENAI_IMAGE_QUALITY=low` makes a cheap trial pass.
+- **Options:** `--only <name>` limits a run, `--parallel <n>` sends n textures' requests at a time, and `OPENAI_IMAGE_QUALITY=low` makes a cheap trial pass.
 
-The committed set is 71 answers. With the trials and redos, making it cost $8.46.
+The committed set is the realism pass's 81 answers, $4.63. With the storybook set before it and its trials, the API has cost $13.09 of the $28.46 granted.
 
 `landmarks.json`, `route.json`, `quality.json` and `audio.json` are hand-edited and never generated (`npm run audio` fills in each track's `gain` and `seconds`).
 
@@ -114,21 +128,22 @@ The music isn't part of `build-world`. To change it, download the originals into
 
 ## Layout
 
-- `public/data/`: everything the runtime loads, about 8.4 MB, plus 16.4 MB of music streamed only once it's turned on (`tex/` is the textures, `heroes/` the landmarks' models, `cards/` their illustrations, `audio/` the music).
+- `public/data/`: everything the runtime loads, about 73 MB, plus 16.4 MB of music streamed only once it's turned on (`tex/` is the textures, `heroes/` the landmarks' models, `cards/` their pictures, `ground/` the streets, `trees/` the species, `audio/` the music).
   - Hand-edited: `route.json` (the autopilot route, its beats and camera keys), `landmarks.json` (models, cards, trigger radii), `quality.json` (the tiers) and `audio.json` (the tracks, their credits and light).
   - Built by the pipeline: the rest.
 - `src/`: one module per job.
   - The core modules: `route`, `autopilot`, `input`, `controller` (blend, pause and the mode state machine), `vehicle`, `camera` (shots and blends), `cards` (trigger rules), `tour` (loop and jumps), `hud`, and `load` (fetches `data/` with progress).
   - Light and render: `lighting` (sun, moon, hemisphere, fog, exposure and bloom curves), `sky` (the dome and its environment cube), `post` (bloom and tone mapping), `quality` (the tiers and the probe), `textures` (loads `tex/`), and `record` (dev-only recording).
-  - `effects`: the wake, splash and spray, the tour boats, trams and gulls.
+  - `effects`: what makes the wake (the hulls and splashes), spray, the sightseeing boats, the moored ships and pontoons, trams and gulls.
+  - `riva` (the runabout), `vehicleMesh` (it and the glider), and `ships` (the river's craft).
   - `audio`: the music, its button and the playlist.
   - `sim` is the simulation step shared by the browser and `tools/simulate.ts`.
-  - `world/` reads the pipeline's files: `river`, `terrain`, `floor`, `bridges`, `landmarks`, `trees` and `gridFile` (the binary grid format). It also holds the hero models (`heroes`), the surfaces' shader patches (`surfaces`, `shaderPatch`), the river (`water`), and the night lights (`nightLights`, `night`).
+  - `world/` reads the pipeline's files: `river`, `terrain`, `floor`, `bridges`, `landmarks`, `trees` (the forest and its levels of detail), `roofBits`, `ground` (the streets' mask and shader), `traffic` and `gridFile` (the binary grid format). It also holds the hero models (`heroes`), the surfaces' shader patches (`surfaces`, `shaderPatch`), the river (`water`), its waves (`wake`, on the GPU FFT in `fft`), and the night lights (`nightLights`, `night`).
 - `tools/`: the pipeline, the timetable, the simulator, the recorder and the music's encoder (`audio.ts`).
   - `tools/heroes/` models the landmarks: `kit.ts` is the modelling kit, `bridgeKit.ts` the bridges' shared parts.
   - `tools/osm/` and `tools/dem/` hold the committed source extracts.
   - `tools/textures/` paints the texture set; `tools/prompts/` holds the image-API prompts.
-  - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers (`imageApi.ts`: the client, its cache and costs); `tools/textures/api.ts` plans the API texture set and fixes its seams.
+  - `tools/lib/` has shared geometry, raster, glTF, file and image-API helpers (`imageApi.ts`: the client, its cache and costs), and the roofs (`roofs.ts`, with `skeletonWorker.ts`); `tools/textures/api.ts` plans the API texture set and fixes its seams.
   - `tools/lib/ktx2.ts` encodes the full-size textures (Basis Universal: ETC1S for the layers, UASTC for the skies, through `ktx2-encoder`'s WebAssembly build).
   - `tools/capturePlugin.ts` is the dev server's frame capture endpoint.
 
@@ -136,7 +151,7 @@ The music isn't part of `build-world`. To change it, download the originals into
 
 The source code is under the MIT License (`LICENSE`), and so are the project's textures and card illustrations: procedural, or AI-generated with OpenAI's image API from the procedural layouts and renders of the scene. The data and the music keep their own licences, credited below:
 
-- the OpenStreetMap extracts in `tools/osm/`, and everything built from them in `public/data/` (the city, river, bridges, trees, tram lines and landmark models), are ODbL 1.0;
+- the OpenStreetMap extracts in `tools/osm/`, and everything built from them in `public/data/` (the city, river, bridges, trees, streets, traffic, moorings, tram lines and landmark models), are ODbL 1.0;
 - the terrain is modified Copernicus DEM GLO-30 data;
 - the music is CC BY 4.0.
 
@@ -145,4 +160,4 @@ The source code is under the MIT License (`LICENSE`), and so are the project's t
 - Map data © OpenStreetMap contributors, ODbL 1.0. The extracts in `tools/osm/` and the files derived from them in `public/data/` are ODbL databases (see `tools/osm/README.md`).
 - Terrain contains modified Copernicus DEM GLO-30 data, © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.
 - Music: "Bossa Antigua", "Backbay Lounge", "Smooth Lovin" and "Night in Venice", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). Trimmed, levelled and re-encoded for the web.
-- Software: three.js (MIT), with the Basis Universal transcoder it ships (Apache 2.0, Binomial LLC), which the build copies to `assets/`.
+- Software: three.js (MIT), with the Basis Universal transcoder it ships (Apache 2.0, Binomial LLC), which the build copies to `assets/`. The build tools (not the app) use `straight-skeleton` (MIT, StrandedKitty), a WebAssembly build of CGAL's straight skeleton (GPL; cgal.org), for the roofs.

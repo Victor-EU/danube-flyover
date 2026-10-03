@@ -19,8 +19,9 @@
     "build-heroes": "tsx tools/build-heroes.ts",
     "build-city": "tsx tools/build-city.ts",
     "build-floor": "tsx tools/build-floor.ts",
+    "build-ground": "tsx tools/build-ground.ts",
     "build-life": "tsx tools/build-life.ts",
-    "build-world": "npm run build-water && npm run build-terrain && npm run build-bridges && npm run build-heroes && npm run build-city && npm run build-floor && npm run build-life",
+    "build-world": "npm run build-water && npm run build-terrain && npm run build-bridges && npm run build-heroes && npm run build-city && npm run build-life && npm run build-floor && npm run build-ground",
     "gen-textures": "tsx tools/gen-textures.ts",
     "pack-textures": "tsx tools/pack-textures.ts",
     "textures": "npm run gen-textures && npm run pack-textures",
@@ -46,6 +47,7 @@
     "osmtogeojson": "^3.0.0-beta.5",
     "polygon-clipping": "^0.15.7",
     "sharp": "^0.35.5",
+    "straight-skeleton": "^3.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"

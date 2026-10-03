@@ -1,8 +1,7 @@
-// The one vehicle with two states: a sailplane and a small boat, scaled in and out of each
-// other behind the splash. Both face -Z in their local space, in metres.
+// The one vehicle with two states: a sailplane and a mahogany runabout (riva.ts), scaled in
+// and out of each other behind the splash. Both face -Z in their local space, in metres.
 
 import {
-  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -12,9 +11,11 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   SphereGeometry,
+  type Texture,
   Vector2,
   Vector3,
 } from "three";
+import { buildRiva, type Riva } from "./riva";
 import type { State } from "./state";
 import { SHARED } from "./world/night";
 
@@ -79,22 +80,24 @@ export class VehicleMesh {
   private readonly glider = new Group();
   private readonly boat = new Group();
   private readonly navMat: MeshBasicMaterial[] = [];
+  private readonly riva: Riva;
 
-  constructor() {
-    const gelcoat = new MeshStandardMaterial({ color: "#f6f5f1", roughness: 0.32, flatShading: true });
-    const red = new MeshStandardMaterial({ color: "#d9442f", roughness: 0.4, flatShading: true });
-    const glass = new MeshStandardMaterial({ color: "#1c2a3a", roughness: 0.12, metalness: 0.4, flatShading: true });
+  /** `env` is the sky's environment cube, for the varnish, chrome and glass. */
+  constructor(env: Texture) {
+    const gelcoat = new MeshStandardMaterial({ color: "#f6f5f1", roughness: 0.25, envMap: env, envMapIntensity: 0.7 });
+    const red = new MeshStandardMaterial({ color: "#d9442f", roughness: 0.35, envMap: env, envMapIntensity: 0.6 });
+    const glass = new MeshStandardMaterial({ color: "#1c2a3a", roughness: 0.06, metalness: 0.5, envMap: env, envMapIntensity: 1.2 });
 
     // The fuselage: a slim pod tapering into the tail boom, turned about its long axis.
     const profile = [
       [0, -1.55], [0.1, -1.46], [0.2, -1.22], [0.26, -0.86], [0.27, -0.46], [0.22, -0.05],
       [0.14, 0.45], [0.09, 1.1], [0.07, 1.7], [0.06, 2.06], [0, 2.14],
     ].map(([r, a]) => new Vector2(r, a));
-    const bodyGeo = new LatheGeometry(profile, 10);
+    const bodyGeo = new LatheGeometry(profile, 28);
     bodyGeo.rotateX(Math.PI / 2);
     bodyGeo.scale(1, 1.12, 1);
     const body = new Mesh(bodyGeo, gelcoat);
-    const canopyGeo = new SphereGeometry(1, 10, 6);
+    const canopyGeo = new SphereGeometry(1, 28, 14);
     canopyGeo.scale(0.2, 0.17, 0.62);
     const canopy = new Mesh(canopyGeo, glass);
     canopy.position.set(0, 0.17, -0.8);
@@ -127,25 +130,9 @@ export class VehicleMesh {
       this.glider.add(new Mesh(loft(side > 0 ? sections : sections.map((sec) => [...sec].reverse())), gelcoat));
     }
 
-    const hullMat = new MeshStandardMaterial({ color: "#f1ede4", roughness: 0.6, flatShading: true });
-    const stripe = new MeshStandardMaterial({ color: "#b0362e", roughness: 0.6, flatShading: true });
-    const deckMat = new MeshStandardMaterial({ color: "#a07850", roughness: 0.8, flatShading: true });
-    const hullGeo = new BoxGeometry(1.8, 0.8, 4.6);
-    // Taper the bow: pull the front vertices together.
-    const p = hullGeo.attributes.position as BufferAttribute;
-    for (let i = 0; i < p.count; i++) {
-      if (p.getZ(i) < 0) p.setX(i, p.getX(i) * 0.25);
-    }
-    hullGeo.computeVertexNormals();
-    const hull = new Mesh(hullGeo, hullMat);
-    hull.position.y = 0.25;
-    const band = new Mesh(new BoxGeometry(1.84, 0.12, 2.6), stripe);
-    band.position.set(0, 0.45, 0.95);
-    const deck = new Mesh(new BoxGeometry(1.6, 0.06, 2.4), deckMat);
-    deck.position.set(0, 0.67, 0.9);
-    const cabin = new Mesh(new BoxGeometry(1.2, 0.7, 1.3), hullMat);
-    cabin.position.set(0, 1.0, 0.5);
-    this.boat.add(hull, band, deck, cabin);
+    this.riva = buildRiva(env);
+    this.boat.add(this.riva.group);
+    this.navMat.push(...this.riva.lamps);
     // The boat's lamp is one of the night lights' pool (nightLights.ts), in the scene root: a
     // light inside this group, which is hidden in flight, would drop out of three's light list
     // and recompile every material at each landing.
@@ -157,7 +144,8 @@ export class VehicleMesh {
     this.group.add(this.glider, this.boat);
   }
 
-  update(st: State, _dt: number): void {
+  /** `waves`: the boat's motion on the waves under it (wake.ts), on top of its own bob and trim. */
+  update(st: State, _dt: number, waves?: { heave: number; pitch: number; roll: number }): void {
     const v = st.vehicle;
     this.group.position.set(v.x, v.y, v.z);
     this.group.rotation.set(v.pitch, -v.heading, -v.roll, "YXZ");
@@ -168,7 +156,13 @@ export class VehicleMesh {
     this.glider.visible = glider > 0.01;
     this.boat.scale.setScalar(boat);
     this.boat.visible = boat > 0.01;
-    this.boat.position.y = Math.sin(st.t * 1.7) * 0.06;
+    // A gentle bob and roll, the bow lifting a little with speed, and the waves under the hull.
+    const w = waves ?? { heave: 0, pitch: 0, roll: 0 };
+    const clamp = (x: number, m: number) => Math.max(-m, Math.min(m, x));
+    this.boat.position.y = Math.sin(st.t * 1.7) * 0.05 + clamp(w.heave, 0.4);
+    this.boat.rotation.x = Math.min(1, v.speed / 12) * 0.035 + Math.sin(st.t * 1.3 + 0.7) * 0.008 + clamp(w.pitch, 0.09);
+    this.boat.rotation.z = Math.sin(st.t * 1.1) * 0.012 + clamp(w.roll, 0.12);
+    if (this.boat.visible) this.riva.update(st.t, v.speed);
 
     // The navigation lights brighten into the night, enough for the bloom to catch them.
     const k = 0.7 + 3.3 * SHARED.uNight.value;

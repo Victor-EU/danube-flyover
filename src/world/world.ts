@@ -2,20 +2,23 @@
 // layer (river, terrain, floor, bridges) is built in Node too, for tools/simulate.ts; the
 // scene graph (glTF city and water, landmark blocks, trees, backdrop) only in the browser.
 
-import { BufferAttribute, BufferGeometry, Color, Group, type InstancedMesh, Mesh, MeshStandardMaterial, PlaneGeometry, type Object3D } from "three";
+import { BufferAttribute, BufferGeometry, Color, type DataArrayTexture, Group, Mesh, MeshStandardMaterial, PlaneGeometry, type Object3D, type PerspectiveCamera, type Texture } from "three";
 import { WORLD } from "../config";
 import type { LifeJson } from "../effects";
 import type { TextureSet } from "../textures";
 import { worldBounds, type Bounds } from "./bounds";
 import { Bridges, type BridgesJson } from "./bridges";
 import { Floor } from "./floor";
+import { type Ground, patchGround, prepareMarks } from "./ground";
 import { Heroes } from "./heroes";
 import { decodeGrid } from "./gridFile";
 import { buildSights, Landmarks, type LandmarksJson, type Sight } from "./landmarks";
 import { River, type RiverJson } from "./river";
+import { RoofBits } from "./roofBits";
 import { Terrain } from "./terrain";
 import { patchBuildings, patchQuays } from "./surfaces";
-import { buildTrees, type TreesJson } from "./trees";
+import { Traffic, type TrafficJson } from "./traffic";
+import { Forest, type TreesJson } from "./trees";
 import { LAYER, MIRROR_ONLY, MIRROR_TERRAIN_STRIDE } from "./water";
 
 export interface WorldFiles {
@@ -27,6 +30,8 @@ export interface WorldFiles {
   floor: ArrayBuffer | Uint8Array;
   /** The trams' lines (browser only). */
   life?: LifeJson;
+  /** Chimneys and rooftop units (browser only). */
+  roofBits?: ArrayBuffer | Uint8Array;
 }
 
 /** The glTF scenes (city, water, heroes by landmark id) and the texture set, loaded (browser only). */
@@ -35,6 +40,15 @@ export interface WorldModels {
   water: Object3D;
   heroes: Record<string, Object3D>;
   textures: TextureSet;
+  /** The ground mask and occlusion, and the road markings. */
+  ground: Ground;
+  marks: Object3D;
+  /** The grown trees and their leaf clusters. */
+  trees: Object3D;
+  leaves: DataArrayTexture;
+  /** The main roads' graph and the parked cars. */
+  traffic: TrafficJson;
+  parked: ArrayBuffer;
 }
 
 export interface World {
@@ -47,8 +61,10 @@ export interface World {
   landmarks: Landmarks | null;
   /** The hero landmarks' models (browser only). */
   heroes: Heroes | null;
-  /** The instanced trees (browser only); the quality tiers draw a share of them. */
-  trees: InstancedMesh | null;
+  /** The trees (browser only); the quality tiers draw a share of them. */
+  trees: Forest | null;
+  /** The cars (browser only). */
+  traffic: Traffic | null;
   /** Every landmark's position and aim point, for the cards and the orbit camera. */
   sights: Sight[];
   /** The river's material (water.ts makes it reflect), and the ponds' (no planar reflection). */
@@ -57,9 +73,11 @@ export interface World {
   group: Group;
   /** Milliseconds per build step, for the debug panel. */
   timings: Record<string, number>;
+  /** Per frame: the roofs' detail near the camera, the trees' levels of detail. */
+  update(camera: PerspectiveCamera, dt: number): void;
 }
 
-export function buildWorld(files: WorldFiles, models?: WorldModels): World {
+export function buildWorld(files: WorldFiles, models?: WorldModels, env?: Texture): World {
   const timings: Record<string, number> = {};
   const time = <T>(name: string, f: () => T): T => {
     const t0 = performance.now();
@@ -80,12 +98,17 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
   const group = new Group();
   let landmarks: Landmarks | null = null;
   let heroes: Heroes | null = null;
-  let trees: InstancedMesh | null = null;
+  let trees: Forest | null = null;
+  let traffic: Traffic | null = null;
+  let roofBits: RoofBits | null = null;
 
   if (models) {
     const ground = time("terrainMesh", () => terrain.buildMesh());
     ground.layers.set(LAYER.terrain);
+    patchGround(ground.material as MeshStandardMaterial, models.ground, models.textures);
     group.add(ground);
+    prepareMarks(models.marks);
+    group.add(models.marks);
     const coarse = time("terrainMirror", () => terrain.buildMesh(MIRROR_TERRAIN_STRIDE, ground.material as MeshStandardMaterial));
     coarse.layers.set(MIRROR_ONLY);
     group.add(coarse);
@@ -120,12 +143,25 @@ export function buildWorld(files: WorldFiles, models?: WorldModels): World {
     group.add(landmarks.group);
     heroes = time("heroes", () => new Heroes(models.heroes, models.textures, Object.fromEntries(files.landmarks.landmarks.map((l) => [l.id, l.name]))));
     group.add(heroes.group);
-    trees = time("trees", () => buildTrees(files.trees, terrain));
-    trees.layers.set(LAYER.trees);
-    group.add(trees);
+    if (files.roofBits) {
+      roofBits = time("roofBits", () => new RoofBits(files.roofBits!));
+      group.add(roofBits.group);
+    }
+    const forest = time("trees", () => new Forest(files.trees, terrain, models.trees, models.leaves));
+    forest.group.traverse((o) => o.layers.set(LAYER.trees));
+    group.add(forest.group);
+    trees = forest;
+    traffic = time("traffic", () => new Traffic(models.traffic, models.parked, terrain, env!));
+    traffic.group.traverse((o) => o.layers.set(LAYER.details));
+    group.add(traffic.group);
     group.add(bridges.group);
   }
-  return { bounds, river, terrain, floor, bridges, landmarks, heroes, trees, sights, water, pond, group, timings };
+  const update = (camera: PerspectiveCamera, dt: number) => {
+    roofBits?.update(camera.position);
+    trees?.update(camera, dt);
+    traffic?.update(camera, dt);
+  };
+  return { bounds, river, terrain, floor, bridges, landmarks, heroes, trees, traffic, sights, water, pond, group, timings, update };
 }
 
 /**

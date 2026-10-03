@@ -46,6 +46,10 @@ const GROUPS: Record<string, { query: string; tags: string[] }> = {
     query: `way["railway"="tram"](${BBOX});`,
     tags: ["railway", "bridge", "tunnel", "layer"],
   },
+  roads: {
+    query: `(way["highway"](${BBOX}); way["area:highway"](${BBOX}); way["amenity"="parking"](${BBOX}); relation["amenity"="parking"](${BBOX}); way["railway"~"^(rail|light_rail|subway|narrow_gauge|funicular)$"](${BBOX}); way["man_made"="pier"](${BBOX}););`,
+    tags: ["highway", "area:highway", "area", "lanes", "width", "surface", "oneway", "sidewalk", "sidewalk:both", "sidewalk:left", "sidewalk:right", "cycleway", "bridge", "tunnel", "layer", "junction", "crossing", "footway", "service", "amenity", "parking", "railway", "man_made", "covered", "indoor", "level"],
+  },
 };
 
 type Json = Record<string, unknown>;

@@ -1,12 +1,13 @@
-// gen-textures --api: the design's image-API texture set, in place of the procedural one.
-// The style sheet is generated first and locked (see styleSheet()), then every texture is
-// generated with it attached:
+// gen-textures --api: the image-API texture set, in place of the procedural one: photographs
+// of the real materials (common.txt), with no style sheet attached since the realism pass
+// (the storybook set before it attached one):
 //   facade_<style>_day / _lit     4 bays × 4 storeys, the lit one from the day one
-//   roof_<kind>, quay_stone       tileable detail, near-white (tinted at runtime)
+//   roof_<kind>, quay_stone, plaster  tileable detail, near-white (tinted at runtime)
 //   hero_<layer>_day / _lit       the landmarks' layers, at their tiles' aspect
+//   ground_<surface>              the streets' and parks' surfaces, in their own colour
 // The model doesn't keep to a grid it's only told about, so the facades, the quay and the hero
 // layers repaint their procedural texture as a layout guide, which is drawn to the grid the
-// shaders map (unguided, a surface can even come back as the style sheet's whole scene). Every day texture is tinted at runtime (the city's by building, the heroes' by
+// shaders map (unguided, the storybook set's surfaces could even come back as a whole scene). Every day texture is tinted at runtime (the city's by building, the heroes' by
 // face), so each is then brought to its procedural twin's level, channel by channel: the
 // tint gives the colour, at the level the lighting was tuned for.
 // The API can't make an image tile, so each day texture then has its seams fixed: shifted by
@@ -22,22 +23,22 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import sharp from "sharp";
 import { HERO_LAYERS, TEXTURES } from "../../src/config";
-import { type ImageClient, type ImageSize, prompt, sizeFor, styleSheet, texturePreamble } from "../lib/imageApi";
+import { type ImageClient, type ImageSize, prompt, sizeFor, texturePreamble } from "../lib/imageApi";
 import { facadeSvg } from "./facades";
 import { heroSvg } from "./heroes";
 import { quaySvg, roofSvg } from "./surfaces";
 import { rasterise } from "./svg";
 
-export async function generateWithApi(api: ImageClient, rawDir: URL, want: (name: string) => boolean): Promise<string[]> {
+export async function generateWithApi(api: ImageClient, rawDir: URL, want: (name: string) => boolean, parallel = 1): Promise<string[]> {
+  /** Each texture's requests run in order; textures run `parallel` at a time. */
+  const tasks: (() => Promise<void>)[] = [];
   const common = texturePreamble();
   const check = new URL("check/", rawDir);
   mkdirSync(check, { recursive: true });
   const written: string[] = [];
 
-  const sheet = await styleSheet(api);
-  // Dry, there's no sheet to attach: the requests are still listed.
-  const refs = (...more: (Buffer | null)[]) => [sheet, ...more].filter((b): b is Buffer => !!b);
-  /** A procedural texture as the layout guide to repaint, at the request's size, then the sheet. */
+  const refs = (...more: (Buffer | null)[]) => more.filter((b): b is Buffer => !!b);
+  /** A procedural texture as the layout guide to repaint, at the request's size. */
   const guided = async (svg: string, size: ImageSize) => {
     const [w, h] = size.split("x").map(Number);
     return [await sharp(await rasterise(svg)).resize(w, h, { fit: "fill" }).removeAlpha().png().toBuffer(), ...refs()];
@@ -71,50 +72,68 @@ export async function generateWithApi(api: ImageClient, rawDir: URL, want: (name
     return sharp(e, { raw: { width: 1024, height: 1024, channels: 3 } }).png().toBuffer();
   };
 
-  for (const style of TEXTURES.facades) {
+  for (const style of TEXTURES.facades) tasks.push(async () => {
     const dayName = `facade_${style}_day`;
     const litName = `facade_${style}_lit`;
-    if (!want(dayName) && !want(litName)) continue;
+    if (!want(dayName) && !want(litName)) return;
     const raw = await api.image({ name: dayName, prompt: `${common}\n\n${layoutPrompt}\n\n${prompt(`facade_${style}`)}`, size: "1024x1024", refs: await guided(facadeSvg(style, "day"), "1024x1024") });
     const day = await tileable(api, dayName, raw, "1024x1024", true, false);
     if (day && want(dayName)) await save(dayName, await neutral(day, facadeSvg(style, "day")), { x: true, y: false });
-    if (!want(litName)) continue;
+    if (!want(litName)) return;
     const night = await api.image({ name: litName, prompt: `${common}\n\n${prompt("facade_lit")}`, size: "1024x1024", refs: refs(day) });
     if (day && night) await save(litName, await emissive(day, night), null);
-  }
-  for (const roof of TEXTURES.roofs) {
+  });
+  for (const roof of TEXTURES.roofs) tasks.push(async () => {
     const name = `roof_${roof.slice(4).toLowerCase()}`;
-    if (!want(name)) continue;
+    if (!want(name)) return;
     const raw = UNGUIDED.has(name)
       ? await api.image({ name, prompt: `${common}\n\n${prompt(name)}`, size: "1024x1024", refs: refs() })
       : await api.image({ name, prompt: `${common}\n\n${prompt("guide_surface")}\n\n${prompt(name)}`, size: "1024x1024", refs: await guided(roofSvg(roof), "1024x1024") });
     const img = await tileable(api, name, raw, "1024x1024", true, true);
     if (img) await save(name, await neutral(img, roofSvg(roof)));
-  }
-  if (want("quay_stone")) {
+  });
+  if (want("quay_stone")) tasks.push(async () => {
     const raw = await api.image({ name: "quay_stone", prompt: `${common}\n\n${prompt("guide_surface")}\n\n${prompt("quay_stone")}`, size: "1024x1024", refs: await guided(quaySvg(), "1024x1024") });
     const img = await tileable(api, "quay_stone", raw, "1024x1024", true, true);
     if (img) await save("quay_stone", await neutral(img, quaySvg()));
-  }
-  for (const l of HERO_LAYERS) {
+  });
+  if (want("plaster")) tasks.push(async () => {
+    const raw = await api.image({ name: "plaster", prompt: `${common}\n\n${prompt("plaster")}`, size: "1024x1024" });
+    const img = await tileable(api, "plaster", raw, "1024x1024", true, true);
+    if (img) await save("plaster", await levelTo(img, [236, 233, 226]));
+  });
+  for (const g of TEXTURES.ground) tasks.push(async () => {
+    const name = `ground_${g}`;
+    if (!want(name)) return;
+    const raw = await api.image({ name, prompt: `${common}\n\n${prompt(name)}`, size: "1024x1024" });
+    const img = await tileable(api, name, raw, "1024x1024", true, true);
+    if (img) await save(name, await levelLuma(img, GROUND_LUMA[g]));
+  });
+  for (const l of HERO_LAYERS) tasks.push(async () => {
     const dayName = `hero_${l.name}_day`;
     const litName = `hero_${l.name}_lit`;
-    if (!want(dayName) && !(l.lit && want(litName))) continue;
+    if (!want(dayName) && !(l.lit && want(litName))) return;
     const [w, h] = l.tile;
     const layout = l.lit
       ? prompt("hero_window", { bays: l.bays, rows: l.rows, width: w, height: h })
       : prompt("hero_material", { width: w });
-    // Unguided, a material layer can come back as the style sheet's scene (the tiles did).
+    // Unguided, a material layer can come back as a scene (the storybook set's tiles did).
     const guide = l.lit ? layoutPrompt : prompt("guide_surface");
     const raw = await api.image({ name: dayName, prompt: `${common}\n\n${guide}\n\n${layout}\n\n${prompt(`hero_${l.name}`)}`, size: sizeFor(w, h), refs: await guided(heroSvg(l.name, "day"), sizeFor(w, h)) });
     // Window layers shift by whole bays and storeys only (half of an even count).
     const axes = { x: !l.lit || l.bays % 2 === 0, y: !l.lit || l.rows % 2 === 0 };
     const day = await tileable(api, dayName, raw, sizeFor(w, h), axes.x, axes.y);
     if (day && want(dayName)) await save(dayName, await neutral(day, heroSvg(l.name, "day")), axes.x || axes.y ? axes : null);
-    if (!l.lit || !want(litName)) continue;
+    if (!l.lit || !want(litName)) return;
     const night = await api.image({ name: litName, prompt: `${common}\n\n${prompt("hero_lit", { glow: prompt(`hero_${l.name}_lit`) })}`, size: sizeFor(w, h), refs: refs(day) });
     if (day && night) await save(litName, await emissive(day, night), null);
-  }
+  });
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.max(1, parallel) }, async () => {
+      while (next < tasks.length) await tasks[next++]();
+    }),
+  );
   return written;
 }
 
@@ -134,6 +153,29 @@ async function neutral(png: Buffer, procedural: string): Promise<Buffer> {
     return [0, 1, 2].map((c) => top.reduce((s, p) => s + p[c], 0) / top.length);
   };
   const [want, have] = await Promise.all([level(await rasterise(procedural)), level(png)]);
+  return sharp(png).removeAlpha().linear(want.map((v, c) => v / Math.max(1, have[c])), [0, 0, 0]).png().toBuffer();
+}
+
+/** Mean sRGB luminance each ground surface is brought to (0–255): asphalt dark, paving and gravel pale. */
+const GROUND_LUMA: Record<string, number> = { asphalt: 84, paving: 142, sett: 118, grass: 96, gravel: 140 };
+
+/** Scales the image so its mean luminance is `want` (0–255), keeping its colour. */
+async function levelLuma(png: Buffer, want: number): Promise<Buffer> {
+  const d = await sharp(png).resize(256, 256, { fit: "fill" }).removeAlpha().raw().toBuffer();
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 3) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+  const k = want / Math.max(1, sum / (d.length / 3));
+  return sharp(png).removeAlpha().linear([k, k, k], [0, 0, 0]).png().toBuffer();
+}
+
+/** Scales each channel so the brighter half of the image averages `want` (0–255): a neutral layer to tint. */
+async function levelTo(png: Buffer, want: number[]): Promise<Buffer> {
+  const d = await sharp(png).resize(256, 256, { fit: "fill" }).removeAlpha().raw().toBuffer();
+  const px: number[][] = [];
+  for (let i = 0; i < d.length; i += 3) px.push([d[i], d[i + 1], d[i + 2]]);
+  px.sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
+  const top = px.slice(px.length >> 1);
+  const have = [0, 1, 2].map((c) => top.reduce((s, p) => s + p[c], 0) / top.length);
   return sharp(png).removeAlpha().linear(want.map((v, c) => v / Math.max(1, have[c])), [0, 0, 0]).png().toBuffer();
 }
 

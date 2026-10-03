@@ -1,6 +1,6 @@
-// The OpenAI image API, for the design's generated textures (gen-textures --api) and card
-// illustrations (cards --api). Every request but the style sheet's attaches the style sheet as
-// a reference, so the whole set shares one look.
+// The OpenAI image API, for the generated textures (gen-textures --api) and the card pictures
+// (cards --api): photographs of the real materials and places, each guided by our own layout
+// or render.
 //
 // The key comes from OPENAI_API_KEY, or from a git-ignored .env.local at the repo root
 // (OPENAI_API_KEY=...). OPENAI_IMAGE_MODEL overrides the model, OPENAI_IMAGE_QUALITY the
@@ -174,19 +174,7 @@ export function imageClient(argv = process.argv): ImageClient {
   };
 }
 
-/**
- * The style sheet every other request attaches: generated once, then locked (delete
- * assets/raw/api/style_sheet-*.png, or change its prompt, to make a new one). Null in a dry run.
- */
-export function styleSheet(api: ImageClient): Promise<Buffer | null> {
-  return api.image({ name: "style_sheet", prompt: `${texturePreamble()}\n\n${prompt("style-sheet")}`, size: "1536x1024" });
-}
-
-/**
- * What the style sheet and every texture request open with: the style (common.txt) and the
- * surfaces' rules (surface.txt). The cards take the style alone: the rules' "no sky colour, no
- * time of day" had the API paint plain paper where a card's sky was.
- */
+/** What every texture request opens with: the look (common.txt) and the surfaces' rules (surface.txt). */
 export function texturePreamble(): string {
   // One newline: the two were one file when the set was made, and the cached answers' keys
   // depend on the exact text.

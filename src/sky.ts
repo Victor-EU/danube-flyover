@@ -169,7 +169,9 @@ void main() {
   }
   if ( moon > 0.0 ) {
     float c = dot( direction, moonDirection );
-    float disc = smoothstep( 0.99988, 0.99993, c );
+    // Half a degree across, as it is (0.27° in radius), with faint maria.
+    float disc = smoothstep( 0.999984, 0.999989, c );
+    disc *= 0.85 + 0.15 * sin( direction.x * 4000.0 ) * sin( direction.y * 3700.0 + 1.3 );
     float halo = exp( -acos( clamp( c, -1.0, 1.0 ) ) / 0.06 ) * 0.25 + exp( -acos( clamp( c, -1.0, 1.0 ) ) / 0.3 ) * 0.06;
     col += vec3( 1.0, 0.97, 0.9 ) * ( disc * 1.6 + halo * 0.08 ) * moon;
   }

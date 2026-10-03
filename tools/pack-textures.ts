@@ -1,12 +1,14 @@
 // Packs the lossless masters in assets/raw/ (from gen-textures, or dropped in by hand) into
 // what the app loads, public/data/tex/:
-//   surfaces_day.webp  the facade and roof layers stacked into one tall strip, one 512² layer
-//                      per TEXTURES.facades then TEXTURES.roofs (it becomes an array texture)
+//   surfaces_day.webp  the facade, roof and plaster layers stacked into one tall strip, one
+//                      512² layer per TEXTURES.facades, TEXTURES.roofs, then the plaster (it
+//                      becomes an array texture)
+//   ground.webp        the ground's surfaces (TEXTURES.ground), the same way
 //   surfaces_lit.webp  the facades' emissive layers, same order
 //   heroes_day.webp    the hero landmarks' layers (HERO_LAYERS), and heroes_lit.webp their
 //                      window layers' emissive twins
 //   quay.webp, water_normal.webp, sky_<name>.webp
-//   full/<set>_<layer>.ktx2  every layer of the four strips above and the quay at its
+//   full/<set>_<layer>.ktx2  every layer of the five strips above and the quay at its
 //                      master's size (1024²), as KTX2 (ETC1S, mipmapped; tools/lib/ktx2.ts),
 //                      which the app swaps in after the first frame
 //   full/sky_<name>.ktx2  the skies at their masters' 4096 × 2048, as UASTC (ETC1S bands
@@ -46,15 +48,17 @@ async function strip(name: string, files: string[], quality: number): Promise<vo
 
 const roofFile = (r: string) => `roof_${r.slice(4).toLowerCase()}.png`;
 const sets = {
-  surfacesDay: [...TEXTURES.facades.map((s) => `facade_${s}_day.png`), ...TEXTURES.roofs.map(roofFile)],
+  surfacesDay: [...TEXTURES.facades.map((s) => `facade_${s}_day.png`), ...TEXTURES.roofs.map(roofFile), `${TEXTURES.plaster}.png`],
   surfacesLit: TEXTURES.facades.map((s) => `facade_${s}_lit.png`),
   heroesDay: HERO_LAYERS.map((l) => `hero_${l.name}_day.png`),
   heroesLit: HERO_LAYERS.filter((l) => l.lit).map((l) => `hero_${l.name}_lit.png`),
+  ground: TEXTURES.ground.map((g) => `ground_${g}.png`),
 };
 await strip("surfaces_day.webp", sets.surfacesDay, 88);
 await strip("surfaces_lit.webp", sets.surfacesLit, 90);
 await strip("heroes_day.webp", sets.heroesDay, 88);
 await strip("heroes_lit.webp", sets.heroesLit, 90);
+await strip("ground.webp", sets.ground, 88);
 await write("quay.webp", sharp(raw("quay_stone.png")).resize(LAYER, LAYER), 86);
 await write("water_normal.webp", sharp(raw("water_normal.png")), 94);
 for (const sky of TEXTURES.skies) await write(`sky_${sky}.webp`, sharp(raw(`sky_${sky}.png`)).resize(2048, 1024), 86);
@@ -76,6 +80,7 @@ const full = {
   layer: (await sharp(raw(sets.surfacesDay[0])).metadata()).width,
   surfaces: { day: await fullSet("surfaces", sets.surfacesDay), lit: await fullSet("surfaces", sets.surfacesLit) },
   heroes: { day: await fullSet("heroes", sets.heroesDay), lit: await fullSet("heroes", sets.heroesLit) },
+  ground: await fullSet("ground", sets.ground),
   quay: await ktx2("full/quay.ktx2", "quay_stone.png"),
   sky: (await sharp(raw(`sky_${TEXTURES.skies[0]}.png`)).metadata()).width,
   skies: {} as Record<string, string>,
@@ -86,7 +91,8 @@ for (const sky of TEXTURES.skies) full.skies[sky] = await ktx2(`full/sky_${sky}.
 const manifest = {
   note: "Packed by tools/pack-textures.ts from assets/raw/ (tools/gen-textures.ts). Layer order follows TEXTURES in src/config.ts.",
   layer: LAYER,
-  surfaces: { day: "surfaces_day.webp", lit: "surfaces_lit.webp", layers: [...TEXTURES.facades, ...TEXTURES.roofs], litLayers: TEXTURES.facades },
+  surfaces: { day: "surfaces_day.webp", lit: "surfaces_lit.webp", layers: [...TEXTURES.facades, ...TEXTURES.roofs, TEXTURES.plaster], litLayers: TEXTURES.facades },
+  ground: { day: "ground.webp", layers: TEXTURES.ground },
   heroes: {
     day: "heroes_day.webp",
     lit: "heroes_lit.webp",

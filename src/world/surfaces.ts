@@ -31,12 +31,16 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
       uSurfLit: tex.uniforms.surfacesLit,
       uStorey: { value: TEXTURES.storey },
       uRoofTile: { value: TEXTURES.roofTile },
+      uPlasterTile: { value: TEXTURES.plasterTile },
+      uPlasterLayer: { value: TEXTURES.facades.length + TEXTURES.roofs.length },
       uTintGain: { value: TEXTURES.tintGain },
       uWindowGain: { value: WINDOW_GAIN },
     },
     vertexPars: /* glsl */ `
       attribute float _seed;
       attribute vec2 _facade;
+      attribute vec2 _canyon;
+      varying vec2 vCanyon;
       varying vec2 vMetres;
       varying float vSeed;
       varying vec2 vFacade;
@@ -46,9 +50,11 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
         "uv_vertex",
         /* glsl */ `
         vMetres = uv * 1024.0;
+        vCanyon = _canyon * 128.0;
         vSeed = _seed;
         vFacade = vec2(floor(_facade.x * 16.0 + 0.5), _facade.y * 128.0);
-        vRoof = step(0.5, normal.y);`,
+        // Layers 8-11 are roofs (their eaves' cornice tops too), 14 trim and 15 firewalls.
+        vRoof = step(7.5, vFacade.x) * step(vFacade.x, 13.5);`,
       ],
     ],
     fragmentPars: /* glsl */ `
@@ -56,9 +62,12 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
       uniform sampler2DArray uSurfLit;
       uniform float uStorey;
       uniform float uRoofTile;
+      uniform float uPlasterTile;
+      uniform float uPlasterLayer;
       uniform float uTintGain;
       uniform float uWindowGain;
       uniform vec3 uStreetGlow;
+      varying vec2 vCanyon;
       varying vec2 vMetres;
       varying float vSeed;
       varying vec2 vFacade;
@@ -70,9 +79,25 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
         "map_fragment",
         /* glsl */ `
         vec3 surfLit = vec3(0.0);
+        // The street's (or courtyard's) skyline seen from this point of the wall: ambient light
+        // falls off with the angle up to it, so canyons darken toward the ground.
+        float skyline = atan(max(vCanyon.y - vMetres.y, 0.0), max(vCanyon.x, 0.5));
+        float canyonAO = 1.0 - 0.62 * skyline / 1.5708;
         if (vRoof > 0.5) {
           vec2 ruv = vMetres / uRoofTile;
-          diffuseColor.rgb *= textureGrad(uSurfDay, vec3(ruv, vFacade.x), dFdx(ruv), dFdy(ruv)).rgb * uTintGain;
+          vec3 roofTex = textureGrad(uSurfDay, vec3(ruv, vFacade.x), dFdx(ruv), dFdy(ruv)).rgb;
+          // Weathering: patches of moss and soot, streaks down the slope, a per-roof shade.
+          float stain = vnoise(vMetres * vec2(0.18, 0.11) + vSeed * 37.0) * 0.6 + vnoise(vMetres * vec2(0.9, 0.25)) * 0.4;
+          float shade = 0.84 + 0.3 * fract(vSeed * 13.7);
+          diffuseColor.rgb *= roofTex * uTintGain * shade * mix(0.8, 1.08, stain);
+        } else if (vFacade.x > 13.5) {
+          // Plain render (the plaster layer): cornices, chimneys and parapets (14), and the
+          // blank firewalls (15), darker toward the ground.
+          float firewall = step(14.5, vFacade.x);
+          vec2 puv = (vMetres + vSeed * 37.0) / uPlasterTile;
+          vec3 render = textureGrad(uSurfDay, vec3(puv, uPlasterLayer), dFdx(puv), dFdy(puv)).rgb;
+          float grime = mix(0.62, 1.0, smoothstep(0.4, 6.5, vMetres.y));
+          diffuseColor.rgb *= mix(vec3(1.0), render, mix(0.5, 1.0, firewall)) * uTintGain * grime * mix(1.0, 0.92, firewall);
         } else {
           // One tile is 4 bays by 4 storeys: the ground floor, then three storeys that repeat.
           float tile = uStorey * 4.0;
@@ -100,6 +125,12 @@ export function patchBuildings(mat: MeshStandardMaterial, tex: TextureSet): void
           surfLit = textureGrad(uSurfLit, vec3(tuv, vFacade.x), gx, gy).rgb * on * uWindowGain * (0.75 + 0.5 * h1);
         }`,
         true,
+      ],
+      [
+        "aomap_fragment",
+        /* glsl */ `
+        reflectedLight.indirectDiffuse *= canyonAO;
+        reflectedLight.indirectSpecular *= canyonAO;`,
       ],
       [
         "emissivemap_fragment",

@@ -34,6 +34,7 @@ export interface TexturesJson {
   layer: number;
   surfaces: { day: string; lit: string; layers: string[]; litLayers: string[] };
   heroes: { day: string; lit: string; layers: string[]; litLayers: string[]; roughness: number[]; grid: [number, number][] };
+  ground: { day: string; layers: string[] };
   quay: string;
   waterNormal: string;
   skies: Record<string, string>;
@@ -43,6 +44,7 @@ export interface TexturesJson {
     layer: number;
     surfaces: { day: string[]; lit: string[] };
     heroes: { day: string[]; lit: string[] };
+    ground: string[];
     quay: string;
     /** The skies' width (their height is half), and a UASTC file per sky. */
     sky: number;
@@ -59,13 +61,15 @@ export interface SkyProbe {
 }
 
 /** The textures the full-size set replaces. */
-type Upgradable = "surfacesDay" | "surfacesLit" | "heroDay" | "heroLit" | "quay";
+type Upgradable = "surfacesDay" | "surfacesLit" | "heroDay" | "heroLit" | "ground" | "quay";
 
 export interface TextureSet {
   surfacesDay: DataArrayTexture | CompressedArrayTexture;
   surfacesLit: DataArrayTexture | CompressedArrayTexture;
   heroDay: DataArrayTexture | CompressedArrayTexture;
   heroLit: DataArrayTexture | CompressedArrayTexture;
+  /** The streets' and parks' surfaces (TEXTURES.ground). */
+  ground: DataArrayTexture | CompressedArrayTexture;
   heroLitCount: number;
   heroRoughness: number[];
   heroGrid: Vector2[];
@@ -134,11 +138,12 @@ function probe(img: ImageBitmap): SkyProbe {
 export async function loadTextures(manifest: TexturesJson, get: (file: string) => Promise<ArrayBuffer>): Promise<TextureSet> {
   const img = async (file: string) => decode(await get(`tex/${file}`));
   const skyNames = Object.keys(manifest.skies);
-  const [day, lit, heroDay, heroLit, quay, normal, ...skies] = await Promise.all([
+  const [day, lit, heroDay, heroLit, ground, quay, normal, ...skies] = await Promise.all([
     img(manifest.surfaces.day),
     img(manifest.surfaces.lit),
     img(manifest.heroes.day),
     img(manifest.heroes.lit),
+    img(manifest.ground.day),
     img(manifest.quay),
     img(manifest.waterNormal),
     ...skyNames.map((s) => img(manifest.skies[s])),
@@ -148,6 +153,7 @@ export async function loadTextures(manifest: TexturesJson, get: (file: string) =
     surfacesLit: arrayTexture(lit, manifest.layer),
     heroDay: arrayTexture(heroDay, manifest.layer),
     heroLit: arrayTexture(heroLit, manifest.layer),
+    ground: arrayTexture(ground, manifest.layer),
     heroLitCount: manifest.heroes.litLayers.length,
     heroRoughness: manifest.heroes.roughness,
     heroGrid: manifest.heroes.grid.map(([b, r]) => new Vector2(b, r)),
@@ -176,7 +182,7 @@ function skyTexture<T extends Texture>(tex: T): T {
   return tex;
 }
 
-const UPGRADABLE: Upgradable[] = ["surfacesDay", "surfacesLit", "heroDay", "heroLit", "quay"];
+const UPGRADABLE: Upgradable[] = ["surfacesDay", "surfacesLit", "heroDay", "heroLit", "ground", "quay"];
 
 /** The GPU formats KTX2Loader can transcode ETC1S to, by name for the debug panel. */
 const FORMAT_NAMES: Record<number, string> = {
@@ -240,6 +246,7 @@ export async function upgradeTextures(set: TextureSet, renderer: WebGLRenderer):
       surfacesLit: await stack(full.surfaces.lit),
       heroDay: await stack(full.heroes.day),
       heroLit: await stack(full.heroes.lit),
+      ground: await stack(full.ground),
       quay: settle(await load(full.quay)),
     };
     const skies = Object.fromEntries(await Promise.all(Object.entries(full.skies).map(async ([name, file]) => [name, skyTexture(await load(file))] as const)));
@@ -278,7 +285,7 @@ export async function upgradeTextures(set: TextureSet, renderer: WebGLRenderer):
 /** Anisotropic filtering for the surfaces seen at grazing angles (walls, quays, water). */
 export function setAnisotropy(set: TextureSet, renderer: WebGLRenderer, max = 8): void {
   const a = Math.max(1, Math.min(max, renderer.capabilities.getMaxAnisotropy()));
-  for (const t of [set.surfacesDay, set.surfacesLit, set.heroDay, set.heroLit, set.quay, set.waterNormal]) {
+  for (const t of [set.surfacesDay, set.surfacesLit, set.heroDay, set.heroLit, set.ground, set.quay, set.waterNormal]) {
     if (t.anisotropy === a) continue;
     t.anisotropy = a;
     t.needsUpdate = true;
